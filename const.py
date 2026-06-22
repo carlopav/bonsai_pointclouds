@@ -19,22 +19,21 @@
 """Naming conventions, IFC schema mapping and PCV API constants.
 
 The IFC data is persistent. Each point cloud is stored as an IfcAnnotation
-(rooted product, carries placement and a property set) with an associated
-IfcDocumentReference holding the file path. The clip box is a Blender object
-driving PCV's clipping; only its enabled state is persisted in the pset.
+(rooted product, carries the placement) with an associated IfcDocumentReference
+holding the file path (standard IFC, no custom property set). The clip box is a
+session-only Blender object driving PCV's clipping and is not persisted.
 """
 
 # IFC schema mapping
 ANNOTATION_OBJECT_TYPE = "PointCloud"
 CLIPBOX_OBJECT_TYPE = "PointCloudClip"
 
-PSET_NAME = "Pset_PointCloud_120g"
-# Property keys stored in PSET_NAME on the point cloud IfcAnnotation.
-PROP_LOCATION = "Location"  # file path, relative to the IFC file
-PROP_SCALE = "Scale"
-PROP_SCAN_DATE = "ScanDate"
-PROP_IS_VISIBLE = "IsVisible"
-PROP_IS_CLIPPED = "IsClipped"
+# Prefix for the IfcDocumentReference / IfcDocumentInformation name.
+DOCUMENT_REF_PREFIX = "POINTCLOUD_"
+
+# No custom property set: the file path lives on IfcDocumentReference.Location
+# and the scan date on IfcDocumentInformation.CreationTime (standard IFC). The
+# visibility/clipping state is session-only (derived from PCV), not persisted.
 
 # Blender object naming derived from the IFC element id.
 HOST_OBJECT_PREFIX = "PointCloud"
@@ -63,5 +62,3 @@ PCV_FORMAT_MAPPING = {
     ".laz": "LAS",
     ".e57": "E57",
 }
-
-DEFAULT_SCALE = 1.0

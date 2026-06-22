@@ -25,6 +25,7 @@ import ifcopenshell.util.element
 import ifcopenshell.util.placement
 import ifcopenshell.util.unit
 import bonsai.tool as tool
+from datetime import datetime
 from mathutils import Matrix
 from pathlib import Path
 from typing import Optional, Union
@@ -56,12 +57,11 @@ class PointCloud:
             new.ifc_definition_id = pointcloud["ifc_definition_id"]
             new.name = pointcloud["name"]
             new.location = pointcloud["location"]
-            new.scale = pointcloud["scale"]
-            new.is_visible = pointcloud["is_visible"]
-            new.is_clipped = pointcloud["is_clipped"]
             element = tool.Ifc.get().by_id(new.ifc_definition_id)
             new.is_loaded = cls.get_host_object(element) is not None
             new.has_clipbox = cls.get_clipbox_object(element) is not None
+            new.is_visible = cls.get_is_visible(element)
+            new.is_clipped = cls.get_is_clipped(element)
 
     @classmethod
     def set_is_editing(cls, is_editing: bool) -> None:
@@ -70,39 +70,51 @@ class PointCloud:
     # IFC --------------------------------------------------------------------
 
     @classmethod
-    def create_annotation(cls, name: str, location: str, scale: float) -> ifcopenshell.entity_instance:
+    def create_annotation(cls, name: str, location: str) -> ifcopenshell.entity_instance:
         element = tool.Ifc.run("root.create_entity", ifc_class="IfcAnnotation", name=name)
         element.ObjectType = const.ANNOTATION_OBJECT_TYPE
         # Give the annotation an (identity) placement so its position is persisted.
         tool.Ifc.run("geometry.edit_object_placement", product=element)
         cls.add_document_reference(element, location)
-        cls.set_pset(
-            element,
-            {
-                const.PROP_LOCATION: location,
-                const.PROP_SCALE: scale,
-                const.PROP_IS_VISIBLE: True,
-                const.PROP_IS_CLIPPED: False,
-            },
-        )
         return element
 
     @classmethod
     def add_document_reference(cls, element: ifcopenshell.entity_instance, location: str) -> None:
+        ref_name = f"{const.DOCUMENT_REF_PREFIX}{element.Name}"
         information = tool.Ifc.run("document.add_information")
-        information.Name = element.Name
+        information.Name = ref_name
+        if tool.Ifc.get_schema() != "IFC2X3":
+            information.CreationTime = datetime.now().isoformat(timespec="seconds")
         reference = tool.Ifc.run("document.add_reference", information=information)
+        reference.Name = ref_name
         reference.Location = location
         tool.Ifc.run("document.assign_document", products=[element], document=reference)
 
     @classmethod
-    def set_pset(cls, element: ifcopenshell.entity_instance, properties: dict) -> None:
-        pset = ifcopenshell.util.element.get_pset(element, const.PSET_NAME)
-        if pset:
-            pset_entity = tool.Ifc.get().by_id(pset["id"])
-        else:
-            pset_entity = tool.Ifc.run("pset.add_pset", product=element, name=const.PSET_NAME)
-        tool.Ifc.run("pset.edit_pset", pset=pset_entity, properties=properties)
+    def get_location(cls, element: ifcopenshell.entity_instance) -> str:
+        """Read the file path from the associated IfcDocumentReference."""
+        for rel in getattr(element, "HasAssociations", []):
+            if rel.is_a("IfcRelAssociatesDocument"):
+                location = getattr(rel.RelatingDocument, "Location", None)
+                if location:
+                    return location
+        return ""
+
+    @classmethod
+    def remove_documents(cls, element: ifcopenshell.entity_instance) -> None:
+        """Remove the document reference(s) and information associated with the element."""
+        for rel in getattr(element, "HasAssociations", []):
+            if not rel.is_a("IfcRelAssociatesDocument"):
+                continue
+            reference = rel.RelatingDocument
+            if tool.Ifc.get_schema() == "IFC2X3":
+                information = (reference.ReferenceToDocument or [None])[0]
+            else:
+                information = reference.ReferencedDocument
+            if information:
+                tool.Ifc.run("document.remove_information", information=information)
+            else:
+                tool.Ifc.run("document.remove_reference", reference=reference)
 
     @classmethod
     def remove_annotation(cls, element: ifcopenshell.entity_instance) -> None:
@@ -143,13 +155,25 @@ class PointCloud:
             pcv.mechanist.PCVMechanist.tag_redraw()
 
     @classmethod
-    def store_visible(cls, element: ifcopenshell.entity_instance, is_visible: bool) -> None:
-        cls.set_pset(element, {const.PROP_IS_VISIBLE: is_visible})
-        cls.set_visibility(element, is_visible)
+    def get_is_visible(cls, element: ifcopenshell.entity_instance) -> bool:
+        """Current PCV draw state of the cloud (session-only, defaults to True)."""
+        obj = cls.get_host_object(element)
+        pcv = cls.get_pcv_module()
+        if obj is None or pcv is None:
+            return True
+        cache = pcv.mechanist.PCVMechanist.cache
+        if obj.name in cache:
+            return bool(cache[obj.name]["draw"])
+        return True
 
     @classmethod
-    def store_clipped(cls, element: ifcopenshell.entity_instance, is_clipped: bool) -> None:
-        cls.set_pset(element, {const.PROP_IS_CLIPPED: is_clipped})
+    def get_is_clipped(cls, element: ifcopenshell.entity_instance) -> bool:
+        """Whether PCV clipping is currently enabled for the cloud (session-only)."""
+        obj = cls.get_host_object(element)
+        shader = cls.get_pcv_shader(obj) if obj else None
+        if shader is None:
+            return False
+        return bool(getattr(shader, const.PCV_CLIP_ENABLED_PROP, False))
 
     # Path resolution --------------------------------------------------------
 
@@ -205,7 +229,7 @@ class PointCloud:
         if pcv is None:
             return "Point Cloud Visualizer add-on not found"
 
-        location = ifcopenshell.util.element.get_pset(element, const.PSET_NAME, const.PROP_LOCATION)
+        location = cls.get_location(element)
         if not location:
             return "No file path stored on this point cloud"
         filepath = cls.get_absolute_location(location)
@@ -234,11 +258,6 @@ class PointCloud:
         pcv.mechanist.PCVMechanist.init()
         pcv.mechanist.PCVMechanist.data(obj, pd, draw=True)
         pcv.mechanist.PCVMechanist.tag_redraw()
-
-        # Honour the persisted visibility flag (PCV erase, not object hide).
-        is_visible = ifcopenshell.util.element.get_pset(element, const.PSET_NAME, const.PROP_IS_VISIBLE)
-        if is_visible is False:
-            cls.set_visibility(element, False)
         return None
 
     @classmethod

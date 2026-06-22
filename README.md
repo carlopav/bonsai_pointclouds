@@ -54,26 +54,30 @@ bonsai_pointclouds/
 
 ## Architettura Dati (PERSISTENTE nell'IFC)
 
-Ogni nuvola è un **IfcAnnotation** (`ObjectType = "PointCloud"`), con:
-- **IfcDocumentReference** (via `IfcRelAssociatesDocument`) che porta il path del file (`Location`).
-- Pset `Pset_PointCloud_120g`: `Location`, `Scale`, `ScanDate`, `IsVisible`, `IsClipped`.
+Ogni nuvola usa **solo entità IFC standard** (nessun pset custom):
+- **IfcAnnotation** (`ObjectType = "PointCloud"`) — segnaposto con `IfcObjectPlacement` (posizione persistente, nome `Pointcloud/...` per l'oggetto Blender).
+- **IfcDocumentReference** (via `IfcRelAssociatesDocument`) — path del file in `Location`; nome `POINTCLOUD_...`.
+- **IfcDocumentInformation.CreationTime** — data di import.
 
-Scrittura sempre tramite `ifcopenshell.api` (`root.create_entity`, `document.add_reference`, `pset.add_pset`/`edit_pset`), così ownership history e undo/redo sono gestiti da Bonsai.
+Stato di sessione (NON persistito): visibilità (PCV erase/draw) e clipping (clip box è un cube 3 m solo in Blender).
+
+Scrittura sempre tramite `ifcopenshell.api` (`root.create_entity`, `document.add_information`/`add_reference`/`assign_document`, `geometry.edit_object_placement`), così ownership history e undo/redo sono gestiti da Bonsai.
 
 ## Note Tecniche
 
-- Le mutazioni IFC passano per `tool.Ifc.Operator` → undo/redo automatico (nessuna transazione manuale).
+- Le mutazioni IFC (add/remove) passano per `tool.Ifc.Operator` → undo/redo automatico.
 - L'UI legge da `data.py` (cache invalidata da handler su undo/redo/load).
-- Oggetti Blender (host nuvola, clip box) non sono persistenti; sono linkati all'elemento IFC via custom prop `bonsai_pointcloud_id`.
+- L'host nuvola è linkato all'IfcAnnotation (`tool.Ifc.link`) → Bonsai persiste il placement; il clip box è solo di sessione.
+- Visibilità via PCV: flag `draw` in `PCVMechanist.cache` (erase), non hide dell'oggetto.
 - API PCV: load `PCVStoker.load()` + `PCVMechanist`, clip via `shader.clip_planes_from_bbox_object`.
 
 ## TODO
 
-- [x] Clip via PCV: `shader.clip_planes_from_bbox_object` + `..._live` + `clip_enabled` (confermato dal sorgente PCV v3)
-- [x] Toggle visibility/clipping funzionanti, stato persistito nel Pset
-- [x] Refactor allineato agli standard Bonsai (core/tool/data/operator/prop/ui)
-- [ ] Gestione placement/georef IFC → world matrix (blender offset di Bonsai)
-- [ ] UI per editare parametri (scala, rinomina)
+- [x] Clip via PCV: `shader.clip_planes_from_bbox_object` + `..._live` + `clip_enabled`
+- [x] Visibilità via PCV erase; clip box = cube 3 m; select/show clip box
+- [x] Refactor Bonsai-standard (core/tool/data/operator/prop/ui), solo entità IFC standard
+- [x] Host persistente (IfcAnnotation + placement) ricaricabile in posizione
+- [ ] Gestione offset georef (false origin grandi: Gauss-Boaga/UTM)
 - [ ] Supporto per altri formati ASCII (XYZ, PTS)
 
 ## License

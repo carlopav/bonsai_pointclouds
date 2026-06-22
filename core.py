@@ -39,9 +39,8 @@ def add_point_cloud(
     point_cloud: type[PointCloud],
     name: str,
     location: str,
-    scale: float,
 ) -> ifcopenshell.entity_instance:
-    element = point_cloud.create_annotation(name=name, location=location, scale=scale)
+    element = point_cloud.create_annotation(name=name, location=location)
     point_cloud.import_point_clouds()
     return element
 
@@ -52,6 +51,7 @@ def remove_point_cloud(
     element: ifcopenshell.entity_instance,
 ) -> None:
     point_cloud.remove_objects(element)
+    point_cloud.remove_documents(element)
     point_cloud.remove_annotation(element)
     point_cloud.import_point_clouds()
 
@@ -63,34 +63,28 @@ def load_pcv(point_cloud: type[PointCloud], element: ifcopenshell.entity_instanc
 
 
 def toggle_visibility(
-    ifc: tool.Ifc,
     point_cloud: type[PointCloud],
     element: ifcopenshell.entity_instance,
     is_visible: bool,
 ) -> None:
-    point_cloud.store_visible(element, is_visible)
+    point_cloud.set_visibility(element, is_visible)
     point_cloud.import_point_clouds()
 
 
 def create_clip_box(
-    ifc: tool.Ifc,
     point_cloud: type[PointCloud],
     element: ifcopenshell.entity_instance,
 ) -> bool:
     created = point_cloud.create_clip_box(element)
-    point_cloud.store_clipped(element, created)
     point_cloud.import_point_clouds()
     return created
 
 
 def toggle_clipping(
-    ifc: tool.Ifc,
     point_cloud: type[PointCloud],
     element: ifcopenshell.entity_instance,
     is_clipped: bool,
 ) -> bool:
     applied = point_cloud.set_clipping(element, is_clipped)
-    if applied:
-        point_cloud.store_clipped(element, is_clipped)
     point_cloud.import_point_clouds()
     return applied

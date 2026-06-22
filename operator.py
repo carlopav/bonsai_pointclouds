@@ -50,7 +50,6 @@ class AddPointCloud(bpy.types.Operator, tool.Ifc.Operator):
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
     filter_glob: bpy.props.StringProperty(default="*.ply;*.las;*.laz;*.e57", options={"HIDDEN"})
     name: bpy.props.StringProperty(name="Name", default="")
-    scale: bpy.props.FloatProperty(name="Scale", default=1.0)
 
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
@@ -62,7 +61,7 @@ class AddPointCloud(bpy.types.Operator, tool.Ifc.Operator):
             return {"CANCELLED"}
         name = self.name or os.path.splitext(os.path.basename(self.filepath))[0]
         location = PointCloud.get_relative_location(self.filepath)
-        core.add_point_cloud(tool.Ifc, PointCloud, name=name, location=location, scale=self.scale)
+        core.add_point_cloud(tool.Ifc, PointCloud, name=name, location=location)
 
 
 class RemovePointCloud(bpy.types.Operator, tool.Ifc.Operator):
@@ -91,29 +90,31 @@ class LoadPointCloudData(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class TogglePointCloudVisibility(bpy.types.Operator, tool.Ifc.Operator):
+class TogglePointCloudVisibility(bpy.types.Operator):
     bl_idname = "bonsai_pointclouds.toggle_visibility"
     bl_label = "Toggle Point Cloud Visibility"
     bl_options = {"REGISTER", "UNDO"}
     point_cloud: bpy.props.IntProperty()
     is_visible: bpy.props.BoolProperty()
 
-    def _execute(self, context):
+    def execute(self, context):
         element = tool.Ifc.get().by_id(self.point_cloud)
-        core.toggle_visibility(tool.Ifc, PointCloud, element, self.is_visible)
+        core.toggle_visibility(PointCloud, element, self.is_visible)
+        return {"FINISHED"}
 
 
-class CreateClipBox(bpy.types.Operator, tool.Ifc.Operator):
+class CreateClipBox(bpy.types.Operator):
     bl_idname = "bonsai_pointclouds.create_clip_box"
     bl_label = "Create Clip Box"
     bl_options = {"REGISTER", "UNDO"}
     point_cloud: bpy.props.IntProperty()
 
-    def _execute(self, context):
+    def execute(self, context):
         element = tool.Ifc.get().by_id(self.point_cloud)
-        if not core.create_clip_box(tool.Ifc, PointCloud, element):
+        if not core.create_clip_box(PointCloud, element):
             self.report({"ERROR"}, "Load the point cloud before creating a clip box")
             return {"CANCELLED"}
+        return {"FINISHED"}
 
 
 class SelectClipBox(bpy.types.Operator):
@@ -130,15 +131,16 @@ class SelectClipBox(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class TogglePointCloudClipping(bpy.types.Operator, tool.Ifc.Operator):
+class TogglePointCloudClipping(bpy.types.Operator):
     bl_idname = "bonsai_pointclouds.toggle_clipping"
     bl_label = "Toggle Point Cloud Clipping"
     bl_options = {"REGISTER", "UNDO"}
     point_cloud: bpy.props.IntProperty()
     is_clipped: bpy.props.BoolProperty()
 
-    def _execute(self, context):
+    def execute(self, context):
         element = tool.Ifc.get().by_id(self.point_cloud)
-        if not core.toggle_clipping(tool.Ifc, PointCloud, element, self.is_clipped):
+        if not core.toggle_clipping(PointCloud, element, self.is_clipped):
             self.report({"WARNING"}, "No clip box available. Create one first.")
             return {"CANCELLED"}
+        return {"FINISHED"}

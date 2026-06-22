@@ -24,7 +24,6 @@ from bpy.props import (
     StringProperty,
     BoolProperty,
     IntProperty,
-    FloatProperty,
     CollectionProperty,
 )
 from typing import TYPE_CHECKING, Union
@@ -34,7 +33,6 @@ class PointCloud(PropertyGroup):
     name: StringProperty(name="Name")
     ifc_definition_id: IntProperty(name="IFC Definition ID")
     location: StringProperty(name="Location", default="")
-    scale: FloatProperty(name="Scale", default=1.0)
     is_visible: BoolProperty(name="Is Visible", default=True)
     is_clipped: BoolProperty(name="Is Clipped", default=False)
     is_loaded: BoolProperty(name="Is Loaded", default=False)
@@ -44,7 +42,6 @@ class PointCloud(PropertyGroup):
         name: str
         ifc_definition_id: int
         location: str
-        scale: float
         is_visible: bool
         is_clipped: bool
         is_loaded: bool

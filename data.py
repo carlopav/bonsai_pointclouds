@@ -17,7 +17,6 @@
 # along with Bonsai Point Clouds.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
-import ifcopenshell.util.element
 import bonsai.tool as tool
 from . import const
 
@@ -50,15 +49,20 @@ class PointCloudsData:
         for element in tool.Ifc.get().by_type("IfcAnnotation"):
             if element.ObjectType != const.ANNOTATION_OBJECT_TYPE:
                 continue
-            pset = ifcopenshell.util.element.get_pset(element, const.PSET_NAME) or {}
             results.append(
                 {
                     "ifc_definition_id": element.id(),
                     "name": element.Name or "Unnamed",
-                    "location": pset.get(const.PROP_LOCATION, ""),
-                    "scale": pset.get(const.PROP_SCALE, const.DEFAULT_SCALE),
-                    "is_visible": pset.get(const.PROP_IS_VISIBLE, True),
-                    "is_clipped": pset.get(const.PROP_IS_CLIPPED, False),
+                    "location": cls.get_location(element),
                 }
             )
         return results
+
+    @staticmethod
+    def get_location(element):
+        for rel in getattr(element, "HasAssociations", []):
+            if rel.is_a("IfcRelAssociatesDocument"):
+                location = getattr(rel.RelatingDocument, "Location", None)
+                if location:
+                    return location
+        return ""
