@@ -20,6 +20,7 @@ import bpy
 from bpy.app.handlers import persistent
 
 from . import data, operator, prop, ui
+from .viewer import PointCloudViewer
 
 bl_info = {
     "name": "Bonsai Point Clouds",
@@ -64,9 +65,11 @@ def register():
     bpy.app.handlers.undo_post.append(refresh_point_clouds)
     bpy.app.handlers.redo_post.append(refresh_point_clouds)
     bpy.app.handlers.load_post.append(refresh_point_clouds)
+    PointCloudViewer.register()
 
 
 def unregister():
+    PointCloudViewer.unregister()
     for handler in (refresh_point_clouds,):
         for app_handler in (bpy.app.handlers.undo_post, bpy.app.handlers.redo_post, bpy.app.handlers.load_post):
             if handler in app_handler:

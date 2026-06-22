@@ -17,7 +17,7 @@ Carica nuvole di punti referenziate nell'IFC e gestisce clip box di clipping in 
 
 - Blender 4.0+
 - Bonsai addon
-- Point Cloud Visualizer v3 addon
+- Point Cloud Visualizer (v3+) — **opzionale**: se presente si usa come backend (PLY/LAS/LAZ/E57 + clipping); se assente, fallback a un viewer GPU integrato (solo **PLY**, senza clipping)
 
 ## Installazione
 
@@ -77,6 +77,7 @@ Scrittura sempre tramite `ifcopenshell.api` (`root.create_entity`, `document.add
 - [x] Visibilità via PCV erase; clip box = cube 3 m; select/show clip box
 - [x] Refactor Bonsai-standard (core/tool/data/operator/prop/ui), solo entità IFC standard
 - [x] Host persistente (IfcAnnotation + placement) ricaricabile in posizione
+- [x] Fallback GPU integrato per PLY quando PCV non è installato (viewer.py)
 - [ ] Gestione offset georef (false origin grandi: Gauss-Boaga/UTM)
 - [ ] Supporto per altri formati ASCII (XYZ, PTS)
 

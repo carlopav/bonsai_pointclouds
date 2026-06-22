@@ -55,6 +55,9 @@ PCV_CLIP_BBOX_OBJECT_PROP = "clip_planes_from_bbox_object"
 PCV_CLIP_BBOX_LIVE_PROP = "clip_planes_from_bbox_object_live"
 PCV_CLIP_ENABLED_PROP = "clip_enabled"
 
+# Point size (px) for the built-in GPU fallback viewer (used when PCV is absent).
+VIEWER_POINT_SIZE = 3.0
+
 # Supported point cloud formats mapped to PCV file types.
 PCV_FORMAT_MAPPING = {
     ".ply": "PLY",

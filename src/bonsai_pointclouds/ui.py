@@ -110,19 +110,21 @@ class BIM_UL_point_clouds(UIList):
         vis_op.point_cloud = item.ifc_definition_id
         vis_op.is_visible = not item.is_visible
 
-        if item.has_clipbox:
-            clip_op = row.operator("bonsai_pointclouds.select_clip_box", text="", icon="MESH_CUBE")
-        else:
-            clip_op = row.operator("bonsai_pointclouds.create_clip_box", text="", icon="MESH_CUBE")
-        clip_op.point_cloud = item.ifc_definition_id
+        # Clipping is only available with Point Cloud Visualizer.
+        if data.has_pcv:
+            if item.has_clipbox:
+                clip_op = row.operator("bonsai_pointclouds.select_clip_box", text="", icon="MESH_CUBE")
+            else:
+                clip_op = row.operator("bonsai_pointclouds.create_clip_box", text="", icon="MESH_CUBE")
+            clip_op.point_cloud = item.ifc_definition_id
 
-        toggle_clip = row.operator(
-            "bonsai_pointclouds.toggle_clipping",
-            text="",
-            icon="CLIPUV_HLT" if item.is_clipped else "CLIPUV_DEHLT",
-        )
-        toggle_clip.point_cloud = item.ifc_definition_id
-        toggle_clip.is_clipped = not item.is_clipped
+            toggle_clip = row.operator(
+                "bonsai_pointclouds.toggle_clipping",
+                text="",
+                icon="CLIPUV_HLT" if item.is_clipped else "CLIPUV_DEHLT",
+            )
+            toggle_clip.point_cloud = item.ifc_definition_id
+            toggle_clip.is_clipped = not item.is_clipped
 
         remove_op = row.operator("bonsai_pointclouds.remove_point_cloud", text="", icon="X")
         remove_op.point_cloud = item.ifc_definition_id

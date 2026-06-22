@@ -57,7 +57,7 @@ def remove_point_cloud(
 
 
 def load_pcv(point_cloud: type[PointCloud], element: ifcopenshell.entity_instance) -> "str | None":
-    error = point_cloud.load_pcv(element)
+    error = point_cloud.load(element)
     point_cloud.import_point_clouds()
     return error
 

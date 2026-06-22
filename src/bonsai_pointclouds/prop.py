@@ -50,11 +50,13 @@ class PointCloud(PropertyGroup):
 
 class BIMPointCloudProperties(PropertyGroup):
     is_editing: BoolProperty(name="Is Editing", default=False)
+    has_pcv: BoolProperty(name="Has PCV", default=False)
     point_clouds: CollectionProperty(name="Point Clouds", type=PointCloud)
     active_point_cloud_index: IntProperty(name="Active Point Cloud Index")
 
     if TYPE_CHECKING:
         is_editing: bool
+        has_pcv: bool
         point_clouds: bpy.types.bpy_prop_collection_idprop[PointCloud]
         active_point_cloud_index: int
 

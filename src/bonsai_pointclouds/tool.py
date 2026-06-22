@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Optional, Union
 from . import const
 from .data import PointCloudsData
+from .viewer import PointCloudViewer, read_ply
 
 # Side length of the clip box mesh cube, in metres.
 CLIPBOX_SIZE = 3.0
@@ -48,9 +49,14 @@ class PointCloud:
         return bpy.context.scene.BIMPointCloudProperties
 
     @classmethod
+    def has_pcv(cls) -> bool:
+        return cls.get_pcv_module() is not None
+
+    @classmethod
     def import_point_clouds(cls) -> None:
         PointCloudsData.load()
         props = cls.get_pointcloud_props()
+        props.has_pcv = cls.has_pcv()
         props.point_clouds.clear()
         for pointcloud in PointCloudsData.data["point_clouds"]:
             new = props.point_clouds.add()
@@ -138,32 +144,37 @@ class PointCloud:
 
     @classmethod
     def remove_objects(cls, element: ifcopenshell.entity_instance) -> None:
-        for obj in (cls.get_host_object(element), cls.get_clipbox_object(element)):
+        host = cls.get_host_object(element)
+        if host is not None:
+            PointCloudViewer.remove(host.name)
+        for obj in (host, cls.get_clipbox_object(element)):
             if obj is not None:
                 bpy.data.objects.remove(obj, do_unlink=True)
 
     @classmethod
     def set_visibility(cls, element: ifcopenshell.entity_instance, is_visible: bool) -> None:
-        """Show/hide the cloud through PCV's draw flag (erase), not object hiding."""
+        """Show/hide the cloud via the active backend (PCV erase, or our viewer draw flag)."""
         obj = cls.get_host_object(element)
-        pcv = cls.get_pcv_module()
-        if obj is None or pcv is None:
+        if obj is None:
             return
-        cache = pcv.mechanist.PCVMechanist.cache
-        if obj.name in cache:
-            cache[obj.name]["draw"] = is_visible
+        pcv = cls.get_pcv_module()
+        if pcv is not None and obj.name in pcv.mechanist.PCVMechanist.cache:
+            pcv.mechanist.PCVMechanist.cache[obj.name]["draw"] = is_visible
             pcv.mechanist.PCVMechanist.tag_redraw()
+        elif PointCloudViewer.exists(obj.name):
+            PointCloudViewer.set_draw(obj.name, is_visible)
 
     @classmethod
     def get_is_visible(cls, element: ifcopenshell.entity_instance) -> bool:
-        """Current PCV draw state of the cloud (session-only, defaults to True)."""
+        """Current draw state of the cloud (session-only, defaults to True)."""
         obj = cls.get_host_object(element)
-        pcv = cls.get_pcv_module()
-        if obj is None or pcv is None:
+        if obj is None:
             return True
-        cache = pcv.mechanist.PCVMechanist.cache
-        if obj.name in cache:
-            return bool(cache[obj.name]["draw"])
+        pcv = cls.get_pcv_module()
+        if pcv is not None and obj.name in pcv.mechanist.PCVMechanist.cache:
+            return bool(pcv.mechanist.PCVMechanist.cache[obj.name]["draw"])
+        if PointCloudViewer.exists(obj.name):
+            return PointCloudViewer.is_drawn(obj.name)
         return True
 
     @classmethod
@@ -220,15 +231,24 @@ class PointCloud:
         return getattr(props, const.PCV_SHADER_GROUP, None)
 
     @classmethod
-    def load_pcv(cls, element: ifcopenshell.entity_instance) -> Optional[str]:
-        """Load the point cloud onto a host Empty via PCV.
+    def ensure_host(cls, element: ifcopenshell.entity_instance) -> bpy.types.Object:
+        """Return the host Empty for the cloud, creating and placing it if needed."""
+        obj = cls.get_host_object(element)
+        if obj is None:
+            obj = bpy.data.objects.new(f"{const.HOST_OBJECT_PREFIX}/{element.Name}", None)
+            obj[LINK_PROP] = element.id()
+            bpy.context.scene.collection.objects.link(obj)
+            # Link to the IFC element so Bonsai manages and persists its placement.
+            tool.Ifc.link(element, obj)
+            obj.matrix_world = cls.get_element_matrix(element)
+        return obj
+
+    @classmethod
+    def load(cls, element: ifcopenshell.entity_instance) -> Optional[str]:
+        """Load the point cloud into the viewport, preferring PCV over our viewer.
 
         Returns None on success, or an error message describing what failed.
         """
-        pcv = cls.get_pcv_module()
-        if pcv is None:
-            return "Point Cloud Visualizer add-on not found"
-
         location = cls.get_location(element)
         if not location:
             return "No file path stored on this point cloud"
@@ -239,25 +259,36 @@ class PointCloud:
         if not filetype:
             return f"Unsupported file type: {Path(filepath).suffix}"
 
-        obj = cls.get_host_object(element)
-        if obj is None:
-            obj = bpy.data.objects.new(f"{const.HOST_OBJECT_PREFIX}/{element.Name}", None)
-            obj[LINK_PROP] = element.id()
-            bpy.context.scene.collection.objects.link(obj)
-            # Link to the IFC element so Bonsai manages and persists its placement.
-            tool.Ifc.link(element, obj)
-            obj.matrix_world = cls.get_element_matrix(element)
+        obj = cls.ensure_host(element)
+        pcv = cls.get_pcv_module()
+        if pcv is not None:
+            return cls._load_with_pcv(pcv, obj, filepath, filetype)
+        return cls._load_with_viewer(obj, filepath, filetype)
 
+    @classmethod
+    def _load_with_pcv(cls, pcv, obj, filepath: str, filetype: str) -> Optional[str]:
         props = getattr(obj, const.PCV_PROPERTY_GROUP)
         props.data.filepath = bpy.path.abspath(filepath)
         props.data.filetype = filetype
-
         pd = pcv.mechanist.PCVStoker.load(props, operator=None)
         if not pd:
             return "PCV could not read the point cloud data"
         pcv.mechanist.PCVMechanist.init()
         pcv.mechanist.PCVMechanist.data(obj, pd, draw=True)
         pcv.mechanist.PCVMechanist.tag_redraw()
+        return None
+
+    @classmethod
+    def _load_with_viewer(cls, obj, filepath: str, filetype: str) -> Optional[str]:
+        if filetype != "PLY":
+            return f"{filetype} files require the Point Cloud Visualizer add-on"
+        try:
+            coords, colors = read_ply(filepath)
+        except (ValueError, OSError) as e:
+            return f"Could not read PLY: {e}"
+        if coords is None or len(coords) == 0:
+            return "No points found in file"
+        PointCloudViewer.load(obj.name, coords, colors)
         return None
 
     @classmethod
