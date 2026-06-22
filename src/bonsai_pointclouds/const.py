@@ -54,6 +54,11 @@ PCV_CLIP_BBOX_OBJECT_PROP = "clip_planes_from_bbox_object"
 PCV_CLIP_BBOX_LIVE_PROP = "clip_planes_from_bbox_object_live"
 PCV_CLIP_ENABLED_PROP = "clip_enabled"
 
+# Clip box defaults (metres): free-standing cube size, and the slab depth used
+# when aligning the clip box to the active drawing view.
+CLIPBOX_SIZE = 3.0
+CLIPBOX_VIEW_DEPTH = 0.4
+
 # Point size (px) for the built-in GPU fallback viewer (used when PCV is absent).
 VIEWER_POINT_SIZE = 3.0
 

@@ -105,6 +105,7 @@ All writes go through `ifcopenshell.api` (`root.create_entity`, `document.add_in
 - [x] Bonsai-standard refactor (core/tool/data/operator/prop/ui), standard IFC entities only
 - [x] Persistent host (IfcAnnotation + placement) reloadable in position
 - [x] Built-in GPU fallback for PLY when PCV is not installed (viewer.py)
+- [x] Align clip box to the active drawing view (extent + shallow depth slab)
 - [ ] Georeference offset handling (large false origins: Gauss-Boaga/UTM)
 - [ ] Support for ASCII formats (XYZ, PTS)
 

@@ -85,3 +85,12 @@ def toggle_clipping(
     applied = point_cloud.set_clipping(element, is_clipped)
     point_cloud.import_point_clouds()
     return applied
+
+
+def align_clip_to_view(
+    point_cloud: type[PointCloud],
+    element: ifcopenshell.entity_instance,
+) -> "str | None":
+    error = point_cloud.align_clip_to_view(element)
+    point_cloud.import_point_clouds()
+    return error

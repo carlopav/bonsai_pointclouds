@@ -21,7 +21,6 @@ import os
 import importlib
 import bpy
 import ifcopenshell
-import ifcopenshell.util.element
 import ifcopenshell.util.placement
 import ifcopenshell.util.unit
 import bonsai.tool as tool
@@ -32,9 +31,6 @@ from typing import Optional
 from . import const
 from .data import PointCloudsData
 from .viewer import PointCloudViewer, read_ply
-
-# Side length of the clip box mesh cube, in metres.
-CLIPBOX_SIZE = 3.0
 
 
 # A custom Blender object property links a viewport object back to its IFC element.
@@ -80,8 +76,23 @@ class PointCloud:
         element.ObjectType = const.ANNOTATION_OBJECT_TYPE
         # Give the annotation an (identity) placement so its position is persisted.
         tool.Ifc.run("geometry.edit_object_placement", product=element)
+        # Contain it in a spatial structure (default IfcSite) so it is not left
+        # "unsorted" — otherwise Bonsai hides it when a drawing view is active.
+        container = cls.get_default_container()
+        if container is not None:
+            tool.Ifc.run("spatial.assign_container", products=[element], relating_structure=container)
         cls.add_document_reference(element, location)
         return element
+
+    @classmethod
+    def get_default_container(cls) -> Optional[ifcopenshell.entity_instance]:
+        """Return a spatial element to contain new point clouds (prefer IfcSite)."""
+        ifc = tool.Ifc.get()
+        for ifc_class in ("IfcSite", "IfcBuilding", "IfcBuildingStorey", "IfcSpace"):
+            elements = ifc.by_type(ifc_class)
+            if elements:
+                return elements[0]
+        return None
 
     @classmethod
     def add_document_reference(cls, element: ifcopenshell.entity_instance, location: str) -> None:
@@ -156,12 +167,26 @@ class PointCloud:
         obj = cls.get_host_object(element)
         if obj is None:
             return
+        # When turning the cloud back on, also undo any object-level hiding from
+        # an active drawing view (PCV won't draw a hidden object).
+        if is_visible:
+            cls.show_host(obj)
         pcv = cls.get_pcv_module()
         if pcv is not None and obj.name in pcv.mechanist.PCVMechanist.cache:
             pcv.mechanist.PCVMechanist.cache[obj.name]["draw"] = is_visible
             pcv.mechanist.PCVMechanist.tag_redraw()
         elif PointCloudViewer.exists(obj.name):
             PointCloudViewer.set_draw(obj.name, is_visible)
+
+    @classmethod
+    def show_host(cls, host: bpy.types.Object) -> None:
+        """Ensure the host object is visible in the viewport (drawing views may hide it)."""
+        host.hide_viewport = False
+        try:
+            host.hide_set(False)
+        except RuntimeError:
+            # Object not in the active view layer; nothing more we can do safely.
+            pass
 
     @classmethod
     def get_is_visible(cls, element: ifcopenshell.entity_instance) -> bool:
@@ -244,6 +269,9 @@ class PointCloud:
             # Link to the IFC element so Bonsai manages and persists its placement.
             tool.Ifc.link(element, obj)
             obj.matrix_world = cls.get_element_matrix(element)
+            # Place it in the right Bonsai collection (matching its IFC container)
+            # so the spatial outliner reflects it.
+            tool.Collector.assign(obj)
         return obj
 
     @classmethod
@@ -263,6 +291,8 @@ class PointCloud:
             return f"Unsupported file type: {Path(filepath).suffix}"
 
         obj = cls.ensure_host(element)
+        # A drawing view may have hidden the host; make sure it is visible.
+        cls.show_host(obj)
         # Drop any previous representation so switching backends (or reloading)
         # never leaves two clouds on the same host.
         cls.clear_representations(obj)
@@ -321,15 +351,8 @@ class PointCloud:
     # Clipping ---------------------------------------------------------------
 
     @classmethod
-    def create_clip_box(cls, element: ifcopenshell.entity_instance) -> bool:
-        """Create a fixed 3 m clip box at the cloud location and feed it to PCV.
-
-        The clip box is a session-only Blender object; it is not persisted in IFC.
-        """
-        host = cls.get_host_object(element)
-        if host is None:
-            return False
-
+    def _ensure_clip_cube(cls, element: ifcopenshell.entity_instance) -> bpy.types.Object:
+        """Return the session-only clip box object (a unit cube), creating it if needed."""
         cube = cls.get_clipbox_object(element)
         if cube is None:
             mesh = bpy.data.meshes.new(f"{const.CLIPBOX_OBJECT_PREFIX}/{element.Name}")
@@ -337,14 +360,71 @@ class PointCloud:
             cube[LINK_PROP] = element.id()
             cube["is_clipbox"] = True
             bpy.context.scene.collection.objects.link(cube)
-            cls._build_cube(mesh, CLIPBOX_SIZE)
-
-        cube.matrix_world.translation = host.matrix_world.translation
+            cls._build_unit_cube(mesh)
         cube.display_type = "WIRE"
         cube.show_in_front = True
         cube.hide_render = True
+        return cube
 
+    @classmethod
+    def create_clip_box(cls, element: ifcopenshell.entity_instance) -> bool:
+        """Create a default cube clip box at the cloud location and feed it to PCV.
+
+        The clip box is a session-only Blender object; it is not persisted in IFC.
+        """
+        host = cls.get_host_object(element)
+        if host is None:
+            return False
+        cube = cls._ensure_clip_cube(element)
+        s = const.CLIPBOX_SIZE
+        cube.matrix_world = Matrix.Translation(host.matrix_world.translation) @ Matrix.Diagonal((s, s, s, 1.0))
         return cls.set_clipping(element, True)
+
+    @classmethod
+    def align_clip_to_view(cls, element: ifcopenshell.entity_instance, depth: float = const.CLIPBOX_VIEW_DEPTH) -> Optional[str]:
+        """Align the clip box to the active orthographic drawing camera.
+
+        The box takes the camera's view extent (width x height) and a shallow
+        ``depth`` slab at the cut plane. Returns None on success, else an error.
+        """
+        host = cls.get_host_object(element)
+        if host is None:
+            return "Load the point cloud first"
+        cam = bpy.context.scene.camera
+        if cam is None or cam.type != "CAMERA" or cam.data.type != "ORTHO":
+            return "No active orthographic drawing view"
+        # The drawing view may have hidden the host; PCV won't draw a hidden
+        # object, so make sure it is visible.
+        cls.show_host(host)
+        width, height = cls._camera_view_extent(cam)
+        existing = cls.get_clipbox_object(element)
+        cube = cls._ensure_clip_cube(element)
+        # Aligning to the view is temporary: remember the previous clip box so it
+        # can be restored when clipping is turned off.
+        if not cube.get("pcv_view_aligned"):
+            cube["pcv_has_saved"] = existing is not None
+            if existing is not None:
+                cls._save_matrix(cube)
+            cube["pcv_view_aligned"] = True
+        center_z = -(cam.data.clip_start + depth / 2.0)
+        cube.matrix_world = (
+            cam.matrix_world
+            @ Matrix.Translation((0.0, 0.0, center_z))
+            @ Matrix.Diagonal((width, height, depth, 1.0))
+        )
+        if not cls.set_clipping(element, True):
+            return "Clipping requires the Point Cloud Visualizer add-on"
+        return None
+
+    @staticmethod
+    def _camera_view_extent(cam: bpy.types.Object) -> tuple[float, float]:
+        """World-space (width, height) of an orthographic camera's view rectangle."""
+        scene = bpy.context.scene
+        rx, ry = scene.render.resolution_x, scene.render.resolution_y
+        ortho = cam.data.ortho_scale
+        if rx >= ry:
+            return ortho, ortho * (ry / rx)
+        return ortho * (rx / ry), ortho
 
     @classmethod
     def select_clip_box(cls, element: ifcopenshell.entity_instance) -> bool:
@@ -368,14 +448,31 @@ class PointCloud:
         cube = cls.get_clipbox_object(element)
         if is_clipped and cube is None:
             return False
+        # Disabling clipping ends a temporary view alignment: restore the
+        # previous clip box transform if there was one.
+        if not is_clipped and cube is not None and cube.get("pcv_view_aligned"):
+            if cube.get("pcv_has_saved"):
+                cls._restore_matrix(cube)
+            cube["pcv_view_aligned"] = False
         setattr(shader, const.PCV_CLIP_BBOX_OBJECT_PROP, cube if is_clipped else None)
         setattr(shader, const.PCV_CLIP_BBOX_LIVE_PROP, is_clipped)
         setattr(shader, const.PCV_CLIP_ENABLED_PROP, is_clipped)
         return True
 
     @staticmethod
-    def _build_cube(mesh: bpy.types.Mesh, size: float) -> None:
-        h = size / 2.0
+    def _save_matrix(obj: bpy.types.Object) -> None:
+        obj["pcv_saved_matrix"] = [v for row in obj.matrix_world for v in row]
+
+    @staticmethod
+    def _restore_matrix(obj: bpy.types.Object) -> None:
+        m = obj.get("pcv_saved_matrix")
+        if m:
+            m = list(m)
+            obj.matrix_world = Matrix((m[0:4], m[4:8], m[8:12], m[12:16]))
+
+    @staticmethod
+    def _build_unit_cube(mesh: bpy.types.Mesh) -> None:
+        h = 0.5
         verts = [
             (-h, -h, -h),
             (h, -h, -h),

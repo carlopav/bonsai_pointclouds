@@ -77,7 +77,7 @@ class RemovePointCloud(bpy.types.Operator, tool.Ifc.Operator):
 
 class LoadPointCloudData(bpy.types.Operator):
     bl_idname = "bonsai_pointclouds.load_point_cloud_data"
-    bl_label = "Load Point Cloud Into Viewport"
+    bl_label = "Load Point Cloud"
     bl_options = {"REGISTER", "UNDO"}
     point_cloud: bpy.props.IntProperty()
 
@@ -127,6 +127,22 @@ class SelectClipBox(bpy.types.Operator):
         element = tool.Ifc.get().by_id(self.point_cloud)
         if not PointCloud.select_clip_box(element):
             self.report({"ERROR"}, "Clip box not found")
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
+class AlignClipToView(bpy.types.Operator):
+    bl_idname = "bonsai_pointclouds.align_clip_to_view"
+    bl_label = "Align Clip Box to Active View"
+    bl_description = "Fit the clip box to the active drawing camera (extent + shallow depth slab)"
+    bl_options = {"REGISTER", "UNDO"}
+    point_cloud: bpy.props.IntProperty()
+
+    def execute(self, context):
+        element = tool.Ifc.get().by_id(self.point_cloud)
+        error = core.align_clip_to_view(PointCloud, element)
+        if error:
+            self.report({"ERROR"}, error)
             return {"CANCELLED"}
         return {"FINISHED"}
 

@@ -72,6 +72,12 @@ class BIM_PT_point_clouds(Panel):
             load_op = load.operator("bonsai_pointclouds.load_point_cloud_data", text="", icon="IMPORT")
             if active is not None:
                 load_op.point_cloud = active.ifc_definition_id
+            if self.props.has_pcv:
+                align = row.row(align=True)
+                align.enabled = active is not None
+                align_op = align.operator("bonsai_pointclouds.align_clip_to_view", text="", icon="VIEW_CAMERA")
+                if active is not None:
+                    align_op.point_cloud = active.ifc_definition_id
             row.operator("bonsai_pointclouds.disable_editing", text="", icon="CANCEL")
         else:
             row.operator("bonsai_pointclouds.load_point_clouds", text="", icon="IMPORT")
