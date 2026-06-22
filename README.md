@@ -8,8 +8,6 @@ It loads point clouds referenced from the IFC model, positions them, and manages
 
 ![Demo](media/bonsai-pcv.gif)
 
-▶️ [Watch the full-quality video (MP4)](https://github.com/carlopav/bonsai_pointclouds/releases/download/v0.3.0/bonsai-pcv.mp4)
-
 ## Features
 
 - ✅ Dedicated **Point Clouds** panel in Bonsai's "Drawings and Documents" tab
