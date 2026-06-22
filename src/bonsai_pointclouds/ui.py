@@ -66,6 +66,12 @@ class BIM_PT_point_clouds(Panel):
 
         if self.props.is_editing:
             row.operator("bonsai_pointclouds.add_point_cloud", text="", icon="ADD")
+            active = self.props.active_point_cloud
+            load = row.row(align=True)
+            load.enabled = active is not None
+            load_op = load.operator("bonsai_pointclouds.load_point_cloud_data", text="", icon="IMPORT")
+            if active is not None:
+                load_op.point_cloud = active.ifc_definition_id
             row.operator("bonsai_pointclouds.disable_editing", text="", icon="CANCEL")
         else:
             row.operator("bonsai_pointclouds.load_point_clouds", text="", icon="IMPORT")
@@ -96,11 +102,8 @@ class BIM_UL_point_clouds(UIList):
             return
 
         row = layout.row(align=True)
-        row.label(text=item.name, icon="OUTLINER_OB_POINTCLOUD")
-
-        load_icon = "RESTRICT_VIEW_OFF" if item.is_loaded else "IMPORT"
-        op = row.operator("bonsai_pointclouds.load_point_cloud_data", text="", icon=load_icon)
-        op.point_cloud = item.ifc_definition_id
+        # Mark loaded clouds so the user knows which are in the viewport.
+        row.label(text=item.name, icon="OUTLINER_OB_POINTCLOUD" if item.is_loaded else "OUTLINER_DATA_POINTCLOUD")
 
         vis_op = row.operator(
             "bonsai_pointclouds.toggle_visibility",

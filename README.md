@@ -1,112 +1,125 @@
-# Bonsai Point Clouds Extension
+# Bonsai Point Clouds
 
-Integrazione tra **Bonsai** (IFC models in Blender) e **Point Cloud Visualizer v3** (Jakub Uhlík).
+Integration between **Bonsai** (IFC models in Blender) and **Point Cloud Visualizer** (Jakub Uhlík).
 
-Carica nuvole di punti referenziate nell'IFC e gestisce clip box di clipping in Blender.
+It loads point clouds referenced from the IFC model, positions them, and manages a clip box for clipping in Blender — with a built-in GPU fallback viewer when PCV is not installed.
 
-## Caratteristiche
+## Demo
 
-- ✅ Pannello collapsibile in Bonsai sezione "Drawings & Documents"
-- ✅ Caricamento pointcloud tramite PCV (PLY, LAS, E57)
-- ✅ Gestione clip box (IfcAnnotation) per il clipping
-- ✅ Supporto multi-versione IFC (2x3, 4, 4x1, 4x2, 4x3)
-- ✅ Undo/Redo tramite transazioni Bonsai
-- ✅ Dati persistenti nell'IFC (non sesionali)
+<!--
+Add the demo video here. Options:
+  - Drag & drop an .mp4 into the GitHub release/issue/PR editor and paste the
+    generated "https://github.com/user-attachments/assets/..." link below.
+  - Or link a YouTube video: [![Demo](THUMBNAIL_URL)](VIDEO_URL)
+-->
 
-## Requisiti
+> 🎥 _Demo video coming soon._
+
+## Features
+
+- ✅ Dedicated **Point Clouds** panel in Bonsai's "Drawings and Documents" tab
+- ✅ Load point clouds via PCV (PLY, LAS, LAZ, E57) or the built-in viewer (PLY)
+- ✅ Persistent host object in the IFC (IfcAnnotation + placement), reloadable in position
+- ✅ Clip box (3 m cube) driving PCV clipping; select/show operator
+- ✅ Show/hide via PCV erase (not object hiding)
+- ✅ Undo/redo through Bonsai transactions
+- ✅ Standard IFC entities only — no custom property set
+
+## Requirements
 
 - Blender 4.0+
-- Bonsai addon
-- Point Cloud Visualizer (v3+) — **opzionale** (vedi sotto)
+- Bonsai add-on
+- Point Cloud Visualizer (v3+) — **optional** (see below)
 
-## Backend di visualizzazione
+## Visualization backend
 
-L'addon usa due backend, scelti automaticamente:
+The add-on uses one of two backends, chosen automatically:
 
-| | Con **Point Cloud Visualizer** installato | Senza PCV (viewer integrato) |
+| | With **Point Cloud Visualizer** | Without PCV (built-in viewer) |
 |---|---|---|
-| Formati | PLY, LAS, LAZ, E57 | **solo PLY** |
-| Resa/performance | shader GPU completo, nuvole grandi | viewer GPU minimale (preview) |
-| **Clipping** (clip box) | ✅ | ❌ non disponibile |
-| Colori per-punto | ✅ | solo se il PLY contiene i colori |
+| Formats | PLY, LAS, LAZ, E57 | **PLY only** |
+| Rendering / performance | full GPU shader, large clouds | minimal GPU viewer (preview) |
+| **Clipping** (clip box) | ✅ | ❌ not available |
+| Per-point colors | ✅ | only if the PLY contains colors |
 
-Il viewer integrato è una soluzione di ripiego pensata per non lasciarti senza nulla quando PCV non c'è. **Per l'esperienza completa è fortemente consigliato Point Cloud Visualizer.**
+The built-in viewer is a fallback so you are not left empty-handed when PCV is missing. **For the full experience, Point Cloud Visualizer is strongly recommended.**
 
-## ⭐ Consigliato: Point Cloud Visualizer (Jakub Uhlík)
+## ⭐ Recommended: Point Cloud Visualizer (Jakub Uhlík)
 
-Questo addon **non include e non sostituisce** Point Cloud Visualizer: lo pilota soltanto, se presente, tramite le sue API pubbliche. PCV è un prodotto eccellente sviluppato e mantenuto da **Jakub Uhlík** — se lo usi nel tuo lavoro, supporta l'autore acquistando la versione ufficiale:
+This add-on **does not bundle or replace** Point Cloud Visualizer: it only drives it, when present, through its public API. PCV is an excellent product developed and maintained by **Jakub Uhlík** — if you use it in your work, support the author by buying the official version:
 
-➡️ **[Point Cloud Visualizer su Blender Market](https://blendermarket.com/products/point-cloud-visualizer)**
+➡️ **[Point Cloud Visualizer on Superhive Market](https://superhivemarket.com/products/pcv)**
 
-Acquistandolo ottieni tutti i formati, le performance su nuvole massive e il clipping, e sostieni lo sviluppo continuo dello strumento.
+Buying it gives you all formats, performance on massive clouds and clipping, and supports the ongoing development of the tool.
 
-## Installazione
+## Installation
 
-1. Clona il repo in una cartella Blender:
+1. Clone the repository:
    ```bash
-   cd ~/.config/blender/4.1/scripts/addons/
    git clone https://github.com/carlopav/bonsai_pointclouds.git
    ```
+2. Install the add-on in Blender from `src/bonsai_pointclouds` (e.g. zip that folder and use Edit > Preferences > Add-ons > Install from Disk, or symlink/junction it into your Blender `scripts/addons`).
+3. Restart Blender and enable the add-on.
+4. The **Point Clouds** panel appears in Properties > Scene > **Drawings and Documents**.
 
-2. Riavvia Blender e abilita l'addon in Edit > Preferences > Add-ons
+## Module architecture
 
-3. Il pannello **Point Clouds** appare in Properties > Scene > **Drawings and Documents**
-
-## Architettura del modulo
-
-Segue il pattern dei moduli Bonsai (separazione core/tool/data):
+Follows the Bonsai module pattern (core/tool/data separation):
 
 ```
-bonsai_pointclouds/
-├── __init__.py    # bl_info, registrazione classi + props + handler refresh
-├── const.py       # naming, schema IFC, costanti PCV
-├── prop.py        # PropertyGroup (PointCloud, BIMPointCloudProperties)
-├── data.py        # PointCloudsData (cache letta dall'IFC per l'UI)
-├── tool.py        # PointCloud (implementazione: IFC via ifcopenshell.api, PCV, Blender)
-├── core.py        # logica pura (no bpy), orchestrazione tool
-├── operator.py    # operatori thin; quelli IFC usano tool.Ifc.Operator (_execute)
-└── ui.py          # BIM_PT_point_clouds (figlio di BIM_PT_tab_drawings) + BIM_UL_point_clouds
+src/bonsai_pointclouds/
+├── __init__.py    # bl_info, class registration + props + refresh handler
+├── const.py       # naming, IFC schema, PCV/viewer constants
+├── prop.py        # PropertyGroups (PointCloud, BIMPointCloudProperties)
+├── data.py        # PointCloudsData (IFC-derived cache for the UI)
+├── tool.py        # PointCloud (implementation: IFC via ifcopenshell.api, PCV, Blender)
+├── core.py        # pure logic (no bpy), orchestrates the tool
+├── operator.py    # thin operators; IFC ones use tool.Ifc.Operator (_execute)
+├── ui.py          # BIM_PT_point_clouds (child of BIM_PT_tab_drawings) + BIM_UL_point_clouds
+└── viewer.py      # built-in GPU fallback viewer + PLY reader
 ```
 
-## Uso
+## Usage
 
-1. Nel pannello clicca l'icona **import** per caricare le nuvole referenziate, poi **+** per aggiungerne una (file dialog PLY/LAS/LAZ/E57).
-2. Nella lista, per ogni nuvola: **carica nel viewport** (PCV), **visibilità**, **crea clip box**, **abilita/disabilita clipping**, **rimuovi**.
+1. In the panel, click the **import** icon to load the referenced clouds, then **+** to add one (file dialog PLY/LAS/LAZ/E57).
+2. Select a cloud and click **Load** (top, next to Add) to display it in the viewport.
+3. Per cloud in the list: **visibility**, **create/select clip box**, **enable/disable clipping** (PCV only), **remove**.
 
-## Architettura Dati (PERSISTENTE nell'IFC)
+## Data architecture (persistent in the IFC)
 
-Ogni nuvola usa **solo entità IFC standard** (nessun pset custom):
-- **IfcAnnotation** (`ObjectType = "PointCloud"`) — segnaposto con `IfcObjectPlacement` (posizione persistente, nome `Pointcloud/...` per l'oggetto Blender).
-- **IfcDocumentReference** (via `IfcRelAssociatesDocument`) — path del file in `Location`; nome `POINTCLOUD_...`.
-- **IfcDocumentInformation.CreationTime** — data di import.
+Each cloud uses **standard IFC entities only** (no custom pset):
+- **IfcAnnotation** (`ObjectType = "PointCloud"`) — placeholder with `IfcObjectPlacement` (persistent position; Blender object named `PointCloud/...`).
+- **IfcDocumentReference** (via `IfcRelAssociatesDocument`) — file path in `Location`; named `POINTCLOUD_...`.
+- **IfcDocumentInformation.CreationTime** — import date.
 
-Stato di sessione (NON persistito): visibilità (PCV erase/draw) e clipping (clip box è un cube 3 m solo in Blender).
+Session-only state (NOT persisted): visibility (PCV erase / viewer draw flag) and clipping (the clip box is a 3 m Blender-only cube).
 
-Scrittura sempre tramite `ifcopenshell.api` (`root.create_entity`, `document.add_information`/`add_reference`/`assign_document`, `geometry.edit_object_placement`), così ownership history e undo/redo sono gestiti da Bonsai.
+All writes go through `ifcopenshell.api` (`root.create_entity`, `document.add_information`/`add_reference`/`assign_document`, `geometry.edit_object_placement`), so ownership history and undo/redo are handled by Bonsai.
 
-## Note Tecniche
+## Technical notes
 
-- Le mutazioni IFC (add/remove) passano per `tool.Ifc.Operator` → undo/redo automatico.
-- L'UI legge da `data.py` (cache invalidata da handler su undo/redo/load).
-- L'host nuvola è linkato all'IfcAnnotation (`tool.Ifc.link`) → Bonsai persiste il placement; il clip box è solo di sessione.
-- Visibilità via PCV: flag `draw` in `PCVMechanist.cache` (erase), non hide dell'oggetto.
-- API PCV: load `PCVStoker.load()` + `PCVMechanist`, clip via `shader.clip_planes_from_bbox_object`.
+- IFC mutations (add/remove) go through `tool.Ifc.Operator` → automatic undo/redo.
+- The UI reads from `data.py` (cache invalidated by handlers on undo/redo/load).
+- The host object is linked to the IfcAnnotation (`tool.Ifc.link`) → Bonsai persists its placement; the clip box is session-only.
+- Visibility via PCV: the `draw` flag in `PCVMechanist.cache` (erase), not object hiding.
+- PCV API: load `PCVStoker.load()` + `PCVMechanist`, clip via `shader.clip_planes_from_bbox_object`.
+- Built-in viewer (`viewer.py`): a single `SpaceView3D` draw handler draws a `POINTS` batch (Blender's `FLAT_COLOR` shader) per cloud using the host's `matrix_world`; points/colors are parsed from PLY into NumPy.
 
 ## TODO
 
 - [x] Clip via PCV: `shader.clip_planes_from_bbox_object` + `..._live` + `clip_enabled`
-- [x] Visibilità via PCV erase; clip box = cube 3 m; select/show clip box
-- [x] Refactor Bonsai-standard (core/tool/data/operator/prop/ui), solo entità IFC standard
-- [x] Host persistente (IfcAnnotation + placement) ricaricabile in posizione
-- [x] Fallback GPU integrato per PLY quando PCV non è installato (viewer.py)
-- [ ] Gestione offset georef (false origin grandi: Gauss-Boaga/UTM)
-- [ ] Supporto per altri formati ASCII (XYZ, PTS)
+- [x] Visibility via PCV erase; clip box = 3 m cube; select/show clip box
+- [x] Bonsai-standard refactor (core/tool/data/operator/prop/ui), standard IFC entities only
+- [x] Persistent host (IfcAnnotation + placement) reloadable in position
+- [x] Built-in GPU fallback for PLY when PCV is not installed (viewer.py)
+- [ ] Georeference offset handling (large false origins: Gauss-Boaga/UTM)
+- [ ] Support for ASCII formats (XYZ, PTS)
 
 ## License
 
-GPL v3 (compatible with Blender ecosystem)
+GPL v3 (compatible with the Blender ecosystem)
 
-## Crediti
+## Credits
 
-- **Point Cloud Visualizer** by Jakub Uhlík — [acquista su Blender Market](https://blendermarket.com/products/point-cloud-visualizer)
+- **Point Cloud Visualizer** by Jakub Uhlík — [buy on Superhive Market](https://superhivemarket.com/products/pcv)
 - **Bonsai** by IfcOpenShell & community

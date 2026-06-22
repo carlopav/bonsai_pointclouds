@@ -216,6 +216,10 @@ class PointCloud:
 
     @classmethod
     def get_pcv_module(cls):
+        # The module may be importable while the add-on is disabled; only treat
+        # PCV as available once its property group is registered on objects.
+        if not hasattr(bpy.types.Object, const.PCV_PROPERTY_GROUP):
+            return None
         for path in const.PCV_IMPORT_PATHS:
             try:
                 return importlib.import_module(path)
@@ -260,10 +264,22 @@ class PointCloud:
             return f"Unsupported file type: {Path(filepath).suffix}"
 
         obj = cls.ensure_host(element)
+        # Drop any previous representation so switching backends (or reloading)
+        # never leaves two clouds on the same host.
+        cls.clear_representations(obj)
         pcv = cls.get_pcv_module()
         if pcv is not None:
             return cls._load_with_pcv(pcv, obj, filepath, filetype)
         return cls._load_with_viewer(obj, filepath, filetype)
+
+    @classmethod
+    def clear_representations(cls, obj: bpy.types.Object) -> None:
+        """Remove this host's cloud from both backends (PCV cache and our viewer)."""
+        PointCloudViewer.remove(obj.name)
+        pcv = cls.get_pcv_module()
+        if pcv is not None and obj.name in pcv.mechanist.PCVMechanist.cache:
+            del pcv.mechanist.PCVMechanist.cache[obj.name]
+            pcv.mechanist.PCVMechanist.tag_redraw()
 
     @classmethod
     def _load_with_pcv(cls, pcv, obj, filepath: str, filetype: str) -> Optional[str]:

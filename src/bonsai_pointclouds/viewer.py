@@ -20,42 +20,18 @@
 
 This is an original implementation of the classic viewport-overlay technique
 (GPU batch of POINTS drawn from a draw handler, transformed by the host
-object's world matrix): a custom shader draws round points, the points live in
-NumPy arrays, and a single SpaceView3D draw handler iterates the registered
-clouds. It only reads PLY; LAS/E57 still require PCV.
+object's world matrix): the points live in NumPy arrays and a single
+SpaceView3D draw handler iterates the registered clouds, drawing them with
+Blender's built-in FLAT_COLOR shader. It only reads PLY; LAS/E57 still require
+PCV.
 """
 
 from __future__ import annotations
-import struct
 import numpy as np
 import bpy
 import gpu
 from gpu_extras.batch import batch_for_shader
 from . import const
-
-
-_VERTEX_SHADER = """
-uniform mat4 ModelViewProjectionMatrix;
-in vec3 position;
-in vec4 color;
-out vec4 f_color;
-void main()
-{
-    gl_Position = ModelViewProjectionMatrix * vec4(position, 1.0);
-    f_color = color;
-}
-"""
-
-_FRAGMENT_SHADER = """
-in vec4 f_color;
-out vec4 fragColor;
-void main()
-{
-    vec2 c = gl_PointCoord - vec2(0.5);
-    if (length(c) > 0.5) discard;
-    fragColor = f_color;
-}
-"""
 
 
 class PointCloudViewer:
@@ -68,7 +44,7 @@ class PointCloudViewer:
     @classmethod
     def _get_shader(cls):
         if cls._shader is None:
-            cls._shader = gpu.types.GPUShader(_VERTEX_SHADER, _FRAGMENT_SHADER)
+            cls._shader = gpu.shader.from_builtin("FLAT_COLOR")
         return cls._shader
 
     @classmethod
@@ -87,7 +63,7 @@ class PointCloudViewer:
     @classmethod
     def load(cls, key: str, coords: np.ndarray, colors: np.ndarray) -> None:
         shader = cls._get_shader()
-        batch = batch_for_shader(shader, "POINTS", {"position": coords, "color": colors})
+        batch = batch_for_shader(shader, "POINTS", {"pos": coords, "color": colors})
         cls.clouds[key] = {"batch": batch, "draw": True}
         cls.tag_redraw()
 
