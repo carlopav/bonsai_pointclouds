@@ -29,7 +29,7 @@ bl_info = {
     "version": (0, 3, 0),
     "blender": (4, 0, 0),
     "location": "Properties > Scene > Drawings and Documents > Point Clouds",
-    "warning": "Requires the Bonsai and Point Cloud Visualizer add-ons",
+    "warning": "Requires the Bonsai add-on (Point Cloud Visualizer optional)",
     "category": "Bonsai",
     "doc_url": "https://github.com/carlopav/bonsai_pointclouds",
     "tracker_url": "https://github.com/carlopav/bonsai_pointclouds/issues",

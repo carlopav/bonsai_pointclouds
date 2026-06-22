@@ -28,7 +28,7 @@ import bonsai.tool as tool
 from datetime import datetime
 from mathutils import Matrix
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 from . import const
 from .data import PointCloudsData
 from .viewer import PointCloudViewer, read_ply
@@ -62,7 +62,6 @@ class PointCloud:
             new = props.point_clouds.add()
             new.ifc_definition_id = pointcloud["ifc_definition_id"]
             new.name = pointcloud["name"]
-            new.location = pointcloud["location"]
             element = tool.Ifc.get().by_id(new.ifc_definition_id)
             new.is_loaded = cls.get_host_object(element) is not None
             new.has_clipbox = cls.get_clipbox_object(element) is not None

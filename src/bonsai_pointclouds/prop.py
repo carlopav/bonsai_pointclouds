@@ -32,7 +32,6 @@ from typing import TYPE_CHECKING, Union
 class PointCloud(PropertyGroup):
     name: StringProperty(name="Name")
     ifc_definition_id: IntProperty(name="IFC Definition ID")
-    location: StringProperty(name="Location", default="")
     is_visible: BoolProperty(name="Is Visible", default=True)
     is_clipped: BoolProperty(name="Is Clipped", default=False)
     is_loaded: BoolProperty(name="Is Loaded", default=False)
@@ -41,7 +40,6 @@ class PointCloud(PropertyGroup):
     if TYPE_CHECKING:
         name: str
         ifc_definition_id: int
-        location: str
         is_visible: bool
         is_clipped: bool
         is_loaded: bool

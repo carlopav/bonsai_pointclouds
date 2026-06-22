@@ -26,7 +26,6 @@ session-only Blender object driving PCV's clipping and is not persisted.
 
 # IFC schema mapping
 ANNOTATION_OBJECT_TYPE = "PointCloud"
-CLIPBOX_OBJECT_TYPE = "PointCloudClip"
 
 # Prefix for the IfcDocumentReference / IfcDocumentInformation name.
 DOCUMENT_REF_PREFIX = "POINTCLOUD_"

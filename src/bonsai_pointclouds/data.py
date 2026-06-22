@@ -39,7 +39,8 @@ class PointCloudsData:
 
     @classmethod
     def has_saved_ifc(cls):
-        return os.path.isfile(tool.Ifc.get_path())
+        path = tool.Ifc.get_path()
+        return bool(path) and os.path.isfile(path)
 
     @classmethod
     def point_clouds(cls):
@@ -53,16 +54,6 @@ class PointCloudsData:
                 {
                     "ifc_definition_id": element.id(),
                     "name": element.Name or "Unnamed",
-                    "location": cls.get_location(element),
                 }
             )
         return results
-
-    @staticmethod
-    def get_location(element):
-        for rel in getattr(element, "HasAssociations", []):
-            if rel.is_a("IfcRelAssociatesDocument"):
-                location = getattr(rel.RelatingDocument, "Location", None)
-                if location:
-                    return location
-        return ""

@@ -61,7 +61,7 @@ class AddPointCloud(bpy.types.Operator, tool.Ifc.Operator):
             return {"CANCELLED"}
         name = self.name or os.path.splitext(os.path.basename(self.filepath))[0]
         location = PointCloud.get_relative_location(self.filepath)
-        core.add_point_cloud(tool.Ifc, PointCloud, name=name, location=location)
+        core.add_point_cloud(PointCloud, name=name, location=location)
 
 
 class RemovePointCloud(bpy.types.Operator, tool.Ifc.Operator):
@@ -72,7 +72,7 @@ class RemovePointCloud(bpy.types.Operator, tool.Ifc.Operator):
 
     def _execute(self, context):
         element = tool.Ifc.get().by_id(self.point_cloud)
-        core.remove_point_cloud(tool.Ifc, PointCloud, element)
+        core.remove_point_cloud(PointCloud, element)
 
 
 class LoadPointCloudData(bpy.types.Operator):
@@ -83,7 +83,7 @@ class LoadPointCloudData(bpy.types.Operator):
 
     def execute(self, context):
         element = tool.Ifc.get().by_id(self.point_cloud)
-        error = core.load_pcv(PointCloud, element)
+        error = core.load(PointCloud, element)
         if error:
             self.report({"ERROR"}, error)
             return {"CANCELLED"}

@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import ifcopenshell
-    import bonsai.tool as tool
     from .tool import PointCloud
 
 
@@ -35,7 +34,6 @@ def disable_editing(point_cloud: type[PointCloud]) -> None:
 
 
 def add_point_cloud(
-    ifc: tool.Ifc,
     point_cloud: type[PointCloud],
     name: str,
     location: str,
@@ -46,7 +44,6 @@ def add_point_cloud(
 
 
 def remove_point_cloud(
-    ifc: tool.Ifc,
     point_cloud: type[PointCloud],
     element: ifcopenshell.entity_instance,
 ) -> None:
@@ -56,7 +53,7 @@ def remove_point_cloud(
     point_cloud.import_point_clouds()
 
 
-def load_pcv(point_cloud: type[PointCloud], element: ifcopenshell.entity_instance) -> "str | None":
+def load(point_cloud: type[PointCloud], element: ifcopenshell.entity_instance) -> "str | None":
     error = point_cloud.load(element)
     point_cloud.import_point_clouds()
     return error
