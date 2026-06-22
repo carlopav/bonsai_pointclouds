@@ -17,7 +17,28 @@ Carica nuvole di punti referenziate nell'IFC e gestisce clip box di clipping in 
 
 - Blender 4.0+
 - Bonsai addon
-- Point Cloud Visualizer (v3+) — **opzionale**: se presente si usa come backend (PLY/LAS/LAZ/E57 + clipping); se assente, fallback a un viewer GPU integrato (solo **PLY**, senza clipping)
+- Point Cloud Visualizer (v3+) — **opzionale** (vedi sotto)
+
+## Backend di visualizzazione
+
+L'addon usa due backend, scelti automaticamente:
+
+| | Con **Point Cloud Visualizer** installato | Senza PCV (viewer integrato) |
+|---|---|---|
+| Formati | PLY, LAS, LAZ, E57 | **solo PLY** |
+| Resa/performance | shader GPU completo, nuvole grandi | viewer GPU minimale (preview) |
+| **Clipping** (clip box) | ✅ | ❌ non disponibile |
+| Colori per-punto | ✅ | solo se il PLY contiene i colori |
+
+Il viewer integrato è una soluzione di ripiego pensata per non lasciarti senza nulla quando PCV non c'è. **Per l'esperienza completa è fortemente consigliato Point Cloud Visualizer.**
+
+## ⭐ Consigliato: Point Cloud Visualizer (Jakub Uhlík)
+
+Questo addon **non include e non sostituisce** Point Cloud Visualizer: lo pilota soltanto, se presente, tramite le sue API pubbliche. PCV è un prodotto eccellente sviluppato e mantenuto da **Jakub Uhlík** — se lo usi nel tuo lavoro, supporta l'autore acquistando la versione ufficiale:
+
+➡️ **[Point Cloud Visualizer su Blender Market](https://blendermarket.com/products/point-cloud-visualizer)**
+
+Acquistandolo ottieni tutti i formati, le performance su nuvole massive e il clipping, e sostieni lo sviluppo continuo dello strumento.
 
 ## Installazione
 
@@ -87,5 +108,5 @@ GPL v3 (compatible with Blender ecosystem)
 
 ## Crediti
 
-- **Point Cloud Visualizer** by Jakub Uhlík
+- **Point Cloud Visualizer** by Jakub Uhlík — [acquista su Blender Market](https://blendermarket.com/products/point-cloud-visualizer)
 - **Bonsai** by IfcOpenShell & community
