@@ -95,6 +95,8 @@ def rasterize(
     H = max(1, math.ceil(cam_height / pixel_size))
 
     world_to_cam = np.linalg.inv(cam_to_world.astype(np.float64))
+    half_w = cam_width  / 2.0
+    half_h = cam_height / 2.0
 
     # Accumulators
     if mode == "RGB":
@@ -125,8 +127,6 @@ def rasterize(
         mask = (z_cam >= -depth) & (z_cam <= 0.0)
 
         # Frustum filter: keep points within the camera extents
-        half_w = cam_width  / 2.0
-        half_h = cam_height / 2.0
         mask &= (x_cam >= -half_w) & (x_cam <= half_w)
         mask &= (y_cam >= -half_h) & (y_cam <= half_h)
 
