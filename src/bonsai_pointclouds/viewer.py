@@ -21,9 +21,14 @@
 Uses a custom GLSL shader so that:
   - gl_PointSize is set from a uniform  (gpu.state.point_size_set is a no-op in
     OpenGL Core Profile where GL_PROGRAM_POINT_SIZE is always active)
-  - draw_on_top forces gl_Position.z to the near plane in the vertex stage
   - clip-box masking is done entirely on the GPU via a local_to_clip matrix
     uniform — no CPU filtering, no batch rebuild when the box moves
+Two shader variants:
+  - Normal shader: standard depth testing, early depth test active (fast).
+  - draw_on_top shader: writes gl_FragDepth compressed into [0, 0.0001] so
+    points appear in front of all geometry but preserve their relative depth
+    order among themselves. Early depth test is disabled by gl_FragDepth, so
+    this variant is kept separate to avoid penalising normal-mode draws.
 Only reads PLY; LAS/E57 still require PCV.
 """
 
@@ -39,19 +44,13 @@ from . import const
 # declarations are injected by the info object, not repeated here)
 # ------------------------------------------------------------------
 
-_VERT_GLSL = """
-void main()
-{
-    /* Clip-box test in clip-box local space.
-       u_local_to_clip transforms from host-object local coords to the
-       clip box's local coords; the box occupies the unit cube [-0.5, 0.5]^3. */
+# Shared clip-test preamble inserted into both vertex shaders.
+_CLIP_GLSL = """
     v_discard = 0.0;
     if (u_clip_enabled != 0) {
         vec4 local = u_local_to_clip * vec4(pos, 1.0);
         vec3 a = abs(local.xyz);
         if (a.x > 0.5 || a.y > 0.5 || a.z > 0.5) {
-            /* Cannot discard in the vertex shader; park the vertex out of
-               clip space and signal the fragment shader to discard. */
             v_discard = 1.0;
             gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
             gl_PointSize = 0.0;
@@ -59,16 +58,16 @@ void main()
             return;
         }
     }
+"""
 
+# --- Normal shader (early depth test active, fastest path) ---
+
+_VERT_GLSL = """
+void main()
+{
+""" + _CLIP_GLSL + """
     gl_Position = u_mvp * vec4(pos, 1.0);
     gl_PointSize = u_point_size;
-
-    /* draw_on_top: collapse z to the near plane so the point always passes
-       the LESS_EQUAL depth test regardless of scene geometry. */
-    if (u_draw_on_top != 0) {
-        gl_Position.z = -gl_Position.w;
-    }
-
     v_color = color;
 }
 """
@@ -76,35 +75,76 @@ void main()
 _FRAG_GLSL = """
 void main()
 {
-    if (v_discard > 0.5) {
-        discard;
-    }
+    if (v_discard > 0.5) discard;
+    fragColor = v_color;
+}
+"""
+
+# --- draw_on_top shader ---
+# All points appear in front of scene geometry while preserving their own
+# relative depth order.  The vertex shader records the real NDC depth in
+# v_depth; the fragment shader writes gl_FragDepth compressed into [0, 0.0001]
+# so every point beats scene geometry (depth > 0) but closer points still win
+# over farther points.  Writing gl_FragDepth disables early depth culling, so
+# this variant is kept separate to avoid penalising normal draws.
+
+_VERT_GLSL_TOP = """
+void main()
+{
+    v_depth = 0.0;
+""" + _CLIP_GLSL + """
+    gl_Position = u_mvp * vec4(pos, 1.0);
+    gl_PointSize = u_point_size;
+    v_color = color;
+    /* Capture actual depth before collapsing z, pass to fragment. */
+    float ndc_z = gl_Position.z / gl_Position.w;   /* [-1, 1] */
+    v_depth = (ndc_z + 1.0) * 0.5;                 /* [0, 1]  */
+    gl_Position.z = -gl_Position.w;                /* → near plane */
+}
+"""
+
+_FRAG_GLSL_TOP = """
+void main()
+{
+    if (v_discard > 0.5) discard;
+    /* Compress depth into [0, 0.0001]: in front of geometry, ordered among points. */
+    gl_FragDepth = v_depth * 0.0001;
     fragColor = v_color;
 }
 """
 
 
-def _make_shader():
-    iface = gpu.types.GPUStageInterfaceInfo("PointCloud_Iface")
+def _build_shader(vert: str, frag: str, name: str, extra_push_constants: list = None):
+    iface = gpu.types.GPUStageInterfaceInfo(name + "_Iface")
     iface.smooth('VEC4', 'v_color')
     iface.smooth('FLOAT', 'v_discard')
+    if extra_push_constants:
+        # extra varyings for the draw_on_top variant
+        iface.smooth('FLOAT', 'v_depth')
 
     info = gpu.types.GPUShaderCreateInfo()
-    info.push_constant('MAT4', 'u_mvp')
-    info.push_constant('MAT4', 'u_local_to_clip')
+    info.push_constant('MAT4',  'u_mvp')
+    info.push_constant('MAT4',  'u_local_to_clip')
     info.push_constant('FLOAT', 'u_point_size')
     info.push_constant('INT',   'u_clip_enabled')
-    info.push_constant('INT',   'u_draw_on_top')
     info.vertex_in(0, 'VEC3', 'pos')
     info.vertex_in(1, 'VEC4', 'color')
     info.vertex_out(iface)
     info.fragment_out(0, 'VEC4', 'fragColor')
-    info.vertex_source(_VERT_GLSL)
-    info.fragment_source(_FRAG_GLSL)
+    info.vertex_source(vert)
+    info.fragment_source(frag)
 
     shader = gpu.shader.create_from_info(info)
     del info, iface
     return shader
+
+
+def _make_shader():
+    return _build_shader(_VERT_GLSL, _FRAG_GLSL, "PointCloud")
+
+
+def _make_shader_top():
+    return _build_shader(_VERT_GLSL_TOP, _FRAG_GLSL_TOP, "PointCloudTop", extra_push_constants=True)
 
 
 def _mat4_flat(m) -> list:
@@ -130,6 +170,7 @@ class PointCloudViewer:
 
     clouds: dict = {}
     _shader = None
+    _shader_top = None
     _draw_handle = None
     _depsgraph_handle = None
 
@@ -138,6 +179,12 @@ class PointCloudViewer:
         if cls._shader is None:
             cls._shader = _make_shader()
         return cls._shader
+
+    @classmethod
+    def _get_shader_top(cls):
+        if cls._shader_top is None:
+            cls._shader_top = _make_shader_top()
+        return cls._shader_top
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -167,6 +214,7 @@ class PointCloudViewer:
             cls._depsgraph_handle = None
         cls.clouds.clear()
         cls._shader = None
+        cls._shader_top = None
 
     # ------------------------------------------------------------------
     # Cloud management
@@ -281,8 +329,8 @@ class PointCloudViewer:
         view_mat = gpu.matrix.get_model_view_matrix()
         proj_mat = gpu.matrix.get_projection_matrix()
 
-        shader = cls._get_shader()
-        shader.bind()
+        shader_normal = cls._get_shader()
+        shader_top    = cls._get_shader_top()
         gpu.state.depth_test_set("LESS_EQUAL")
 
         for key, entry in list(cls.clouds.items()):
@@ -303,15 +351,17 @@ class PointCloudViewer:
                     if prop_item is not None:
                         prop_item.host_obj_name = key  # heal for next frame
 
-            point_size = prop_item.point_size if prop_item else const.VIEWER_POINT_SIZE
-            draw_on_top = prop_item.draw_on_top if prop_item else False
-            opacity = entry.get("opacity", 1.0)
+            point_size   = prop_item.point_size   if prop_item else const.VIEWER_POINT_SIZE
+            draw_on_top  = prop_item.draw_on_top  if prop_item else False
+            opacity      = entry.get("opacity", 1.0)
+
+            shader = shader_top if draw_on_top else shader_normal
+            shader.bind()
 
             # MVP: projection × view × model (column-major for GLSL).
             mvp = proj_mat @ view_mat @ obj.matrix_world
             shader.uniform_float("u_mvp", _mat4_flat(mvp))
             shader.uniform_float("u_point_size", point_size)
-            shader.uniform_int("u_draw_on_top", 1 if draw_on_top else 0)
 
             clip_box = entry.get("clip_box")
             if entry.get("clip_enabled") and clip_box is not None:

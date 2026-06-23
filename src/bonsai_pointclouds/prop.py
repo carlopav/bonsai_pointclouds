@@ -40,14 +40,19 @@ from . import const
 
 def _update_point_size(self: "PointCloud", _context: bpy.types.Context) -> None:
     from .viewer import PointCloudViewer
-    # Our viewer reads point_size directly from the prop at draw time, so we
-    # only need to trigger a redraw.  For PCV, try to push the value.
     PointCloudViewer.tag_redraw()
     key = self.host_obj_name
     if key and not PointCloudViewer.exists(key):
         obj = bpy.data.objects.get(key)
         if obj:
-            _try_set_pcv(obj, "point_size", self.point_size)
+            # PCV exposes point size under .display.point_size
+            props = getattr(obj, const.PCV_PROPERTY_GROUP, None)
+            display = getattr(props, const.PCV_DISPLAY_GROUP, None) if props else None
+            if display is not None and hasattr(display, "point_size"):
+                try:
+                    display.point_size = self.point_size
+                except (AttributeError, TypeError):
+                    pass
 
 
 def _update_opacity(self: "PointCloud", _context: bpy.types.Context) -> None:
@@ -61,13 +66,30 @@ def _update_opacity(self: "PointCloud", _context: bpy.types.Context) -> None:
     else:
         obj = bpy.data.objects.get(key)
         if obj:
-            _try_set_pcv(obj, "alpha", self.opacity)
+            # PCV exposes opacity under .display.global_alpha
+            props = getattr(obj, const.PCV_PROPERTY_GROUP, None)
+            display = getattr(props, const.PCV_DISPLAY_GROUP, None) if props else None
+            if display is not None and hasattr(display, "global_alpha"):
+                try:
+                    display.global_alpha = self.opacity
+                except (AttributeError, TypeError):
+                    pass
 
 
 def _update_draw_on_top(self: "PointCloud", _context: bpy.types.Context) -> None:
     from .viewer import PointCloudViewer
-    # Viewer reads draw_on_top from the prop at draw time — just redraw.
     PointCloudViewer.tag_redraw()
+    key = self.host_obj_name
+    if key and not PointCloudViewer.exists(key):
+        obj = bpy.data.objects.get(key)
+        if obj:
+            props = getattr(obj, const.PCV_PROPERTY_GROUP, None)
+            display = getattr(props, const.PCV_DISPLAY_GROUP, None) if props else None
+            if display is not None and hasattr(display, "draw_in_front"):
+                try:
+                    display.draw_in_front = self.draw_on_top
+                except (AttributeError, TypeError):
+                    pass
 
 
 def _try_set_pcv(obj: "bpy.types.Object", attr: str, value) -> None:

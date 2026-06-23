@@ -48,6 +48,7 @@ PCV_IMPORT_PATHS = (
 )
 PCV_PROPERTY_GROUP = "point_cloud_visualizer"
 PCV_SHADER_GROUP = "shader"
+PCV_DISPLAY_GROUP = "display"
 
 # Clip planes are derived from a bounding box object assigned to the shader.
 PCV_CLIP_BBOX_OBJECT_PROP = "clip_planes_from_bbox_object"
