@@ -90,6 +90,22 @@ class PointCloud:
     def set_is_editing(cls, is_editing: bool) -> None:
         cls.get_pointcloud_props().is_editing = is_editing
 
+    @classmethod
+    def sync_item(cls, element: ifcopenshell.entity_instance) -> None:
+        """Refresh only the UIList prop item for one element — no IFC query, no full rebuild."""
+        props = cls.get_pointcloud_props()
+        ifc_id = element.id()
+        for item in props.point_clouds:
+            if item.ifc_definition_id == ifc_id:
+                host = cls.get_host_object(element)
+                item.is_loaded = host is not None
+                item.has_clipbox = cls.get_clipbox_object(element) is not None
+                item.is_visible = cls.get_is_visible(element)
+                item.is_clipped = cls.get_is_clipped(element)
+                if host is not None:
+                    item.host_obj_name = host.name
+                break
+
     # IFC --------------------------------------------------------------------
 
     @classmethod
@@ -162,9 +178,16 @@ class PointCloud:
 
     @classmethod
     def get_host_object(cls, element: ifcopenshell.entity_instance) -> Optional[bpy.types.Object]:
+        # Fast path: custom prop set by ensure_host (survives rename).
         for obj in bpy.context.scene.objects:
             if obj.get(LINK_PROP) == element.id() and not obj.get("is_clipbox"):
                 return obj
+        # Fallback: Bonsai's own link (object created by root.create_entity before
+        # we had a chance to tag it).
+        obj = tool.Ifc.get_object(element)
+        if obj is not None and not obj.get("is_clipbox"):
+            obj[LINK_PROP] = element.id()  # tag for future fast-path lookups
+            return obj
         return None
 
     @classmethod
@@ -287,18 +310,29 @@ class PointCloud:
 
     @classmethod
     def ensure_host(cls, element: ifcopenshell.entity_instance) -> bpy.types.Object:
-        """Return the host Empty for the cloud, creating and placing it if needed."""
+        """Return the host object for the cloud, creating and placing it if needed.
+
+        Bonsai's root.create_entity already creates a Blender object for the
+        IfcAnnotation.  We reuse that object rather than creating a parallel
+        duplicate; get_host_object tags it with LINK_PROP so future lookups
+        use the fast path.
+        """
         obj = cls.get_host_object(element)
         if obj is None:
+            # No object linked to this element at all — create one from scratch.
             obj = bpy.data.objects.new(f"{const.HOST_OBJECT_PREFIX}/{element.Name}", None)
             obj[LINK_PROP] = element.id()
+            # Temporarily link to the scene root so the object exists in the scene,
+            # then let Collector move it to the correct IFC spatial collection.
             bpy.context.scene.collection.objects.link(obj)
-            # Link to the IFC element so Bonsai manages and persists its placement.
             tool.Ifc.link(element, obj)
             obj.matrix_world = cls.get_element_matrix(element)
-            # Place it in the right Bonsai collection (matching its IFC container)
-            # so the spatial outliner reflects it.
             tool.Collector.assign(obj)
+            # Remove from root collection — Collector has placed it in the IFC one.
+            try:
+                bpy.context.scene.collection.objects.unlink(obj)
+            except RuntimeError:
+                pass  # already moved, or not in root collection
         return obj
 
     @classmethod
@@ -348,16 +382,32 @@ class PointCloud:
         pcv.mechanist.PCVMechanist.init()
         pcv.mechanist.PCVMechanist.data(obj, pd, draw=True)
         pcv.mechanist.PCVMechanist.tag_redraw()
-        # Link prop item to host object; apply saved opacity to the viewer.
+        # Link prop item to host object; push saved display settings to PCV.
         ifc_id = obj.get(LINK_PROP)
         if ifc_id is not None:
             props = cls.get_pointcloud_props()
             for item in props.point_clouds:
                 if item.ifc_definition_id == ifc_id:
                     item.host_obj_name = obj.name
-                    from .prop import _try_set_pcv
-                    _try_set_pcv(obj, "point_size", item.point_size)
-                    _try_set_pcv(obj, "alpha", item.opacity)
+                    pcv_props = getattr(obj, const.PCV_PROPERTY_GROUP, None)
+                    display = getattr(pcv_props, const.PCV_DISPLAY_GROUP, None) if pcv_props else None
+                    if display is not None:
+                        if hasattr(display, "point_size"):
+                            try:
+                                display.point_size = item.point_size
+                            except (AttributeError, TypeError):
+                                pass
+                        if hasattr(display, "global_alpha"):
+                            try:
+                                display.use_alpha = True
+                                display.global_alpha = item.opacity
+                            except (AttributeError, TypeError):
+                                pass
+                        if hasattr(display, "draw_in_front"):
+                            try:
+                                display.draw_in_front = item.draw_on_top
+                            except (AttributeError, TypeError):
+                                pass
                     break
         return None
 

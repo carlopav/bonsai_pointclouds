@@ -65,7 +65,7 @@ def toggle_visibility(
     is_visible: bool,
 ) -> None:
     point_cloud.set_visibility(element, is_visible)
-    point_cloud.import_point_clouds()
+    point_cloud.sync_item(element)
 
 
 def create_clip_box(
@@ -73,7 +73,7 @@ def create_clip_box(
     element: ifcopenshell.entity_instance,
 ) -> bool:
     created = point_cloud.create_clip_box(element)
-    point_cloud.import_point_clouds()
+    point_cloud.sync_item(element)
     return created
 
 
@@ -83,7 +83,7 @@ def toggle_clipping(
     is_clipped: bool,
 ) -> bool:
     applied = point_cloud.set_clipping(element, is_clipped)
-    point_cloud.import_point_clouds()
+    point_cloud.sync_item(element)
     return applied
 
 
@@ -92,5 +92,5 @@ def align_clip_to_view(
     element: ifcopenshell.entity_instance,
 ) -> "str | None":
     error = point_cloud.align_clip_to_view(element)
-    point_cloud.import_point_clouds()
+    point_cloud.sync_item(element)
     return error

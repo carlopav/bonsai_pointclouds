@@ -26,7 +26,7 @@ bl_info = {
     "name": "Bonsai Point Clouds",
     "description": "Bridge between Bonsai (IFC) and Point Cloud Visualizer (PCV)",
     "author": "Carlo Pavan",
-    "version": (0, 4, 0),
+    "version": (0, 5, 0),
     "blender": (4, 0, 0),
     "location": "Properties > Scene > Drawings and Documents > Point Clouds",
     "warning": "Requires the Bonsai add-on (Point Cloud Visualizer optional)",

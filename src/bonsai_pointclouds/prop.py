@@ -66,11 +66,12 @@ def _update_opacity(self: "PointCloud", _context: bpy.types.Context) -> None:
     else:
         obj = bpy.data.objects.get(key)
         if obj:
-            # PCV exposes opacity under .display.global_alpha
+            # PCV exposes opacity under .display.global_alpha + .display.use_alpha
             props = getattr(obj, const.PCV_PROPERTY_GROUP, None)
             display = getattr(props, const.PCV_DISPLAY_GROUP, None) if props else None
             if display is not None and hasattr(display, "global_alpha"):
                 try:
+                    display.use_alpha = True
                     display.global_alpha = self.opacity
                 except (AttributeError, TypeError):
                     pass
