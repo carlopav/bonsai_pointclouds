@@ -106,8 +106,16 @@ All writes go through `ifcopenshell.api` (`root.create_entity`, `document.add_in
 - [x] Persistent host (IfcAnnotation + placement) reloadable in position
 - [x] Built-in GPU fallback for PLY when PCV is not installed (viewer.py)
 - [x] Align clip box to the active drawing view (extent + shallow depth slab)
-- [ ] Georeference offset handling (large false origins: Gauss-Boaga/UTM)
+- [ ] Built-in clip box for the GPU viewer (minimal clipping without PCV)
+- [ ] Test coverage for the `core` logic
+- [ ] Georeference offset handling (optional — many survey clouds use a local frame)
 - [ ] Support for ASCII formats (XYZ, PTS)
+
+### Toward an upstream Bonsai PR
+
+- [ ] Make the free GPU viewer the primary backend (PCV optional acceleration), incl. clipping
+- [ ] Tests on the `core` modules
+- [ ] Optional georeference/false-origin support
 
 ## License
 
