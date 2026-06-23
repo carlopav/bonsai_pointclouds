@@ -72,12 +72,11 @@ class BIM_PT_point_clouds(Panel):
             load_op = load.operator("bonsai_pointclouds.load_point_cloud_data", text="", icon="IMPORT")
             if active is not None:
                 load_op.point_cloud = active.ifc_definition_id
-            if self.props.has_pcv:
-                align = row.row(align=True)
-                align.enabled = active is not None
-                align_op = align.operator("bonsai_pointclouds.align_clip_to_view", text="", icon="VIEW_CAMERA")
-                if active is not None:
-                    align_op.point_cloud = active.ifc_definition_id
+            align = row.row(align=True)
+            align.enabled = active is not None
+            align_op = align.operator("bonsai_pointclouds.align_clip_to_view", text="", icon="VIEW_CAMERA")
+            if active is not None:
+                align_op.point_cloud = active.ifc_definition_id
             row.operator("bonsai_pointclouds.disable_editing", text="", icon="CANCEL")
         else:
             row.operator("bonsai_pointclouds.load_point_clouds", text="", icon="IMPORT")
@@ -91,6 +90,15 @@ class BIM_PT_point_clouds(Panel):
             self.props,
             "active_point_cloud_index",
         )
+
+        # Per-cloud settings shown below the list for the selected entry.
+        active = self.props.active_point_cloud
+        if active is not None:
+            box = self.layout.box()
+            col = box.column(align=True)
+            col.prop(active, "point_size")
+            col.prop(active, "opacity")
+            col.prop(active, "draw_on_top")
 
 
 class BIM_UL_point_clouds(UIList):
@@ -108,7 +116,6 @@ class BIM_UL_point_clouds(UIList):
             return
 
         row = layout.row(align=True)
-        # Mark loaded clouds so the user knows which are in the viewport.
         row.label(text=item.name, icon="OUTLINER_OB_POINTCLOUD" if item.is_loaded else "OUTLINER_DATA_POINTCLOUD")
 
         vis_op = row.operator(
@@ -119,21 +126,20 @@ class BIM_UL_point_clouds(UIList):
         vis_op.point_cloud = item.ifc_definition_id
         vis_op.is_visible = not item.is_visible
 
-        # Clipping is only available with Point Cloud Visualizer.
-        if data.has_pcv:
-            if item.has_clipbox:
-                clip_op = row.operator("bonsai_pointclouds.select_clip_box", text="", icon="MESH_CUBE")
-            else:
-                clip_op = row.operator("bonsai_pointclouds.create_clip_box", text="", icon="MESH_CUBE")
-            clip_op.point_cloud = item.ifc_definition_id
+        # Clipping is available for both PCV and the GPU viewer.
+        if item.has_clipbox:
+            clip_op = row.operator("bonsai_pointclouds.select_clip_box", text="", icon="MESH_CUBE")
+        else:
+            clip_op = row.operator("bonsai_pointclouds.create_clip_box", text="", icon="MESH_CUBE")
+        clip_op.point_cloud = item.ifc_definition_id
 
-            toggle_clip = row.operator(
-                "bonsai_pointclouds.toggle_clipping",
-                text="",
-                icon="CLIPUV_HLT" if item.is_clipped else "CLIPUV_DEHLT",
-            )
-            toggle_clip.point_cloud = item.ifc_definition_id
-            toggle_clip.is_clipped = not item.is_clipped
+        toggle_clip = row.operator(
+            "bonsai_pointclouds.toggle_clipping",
+            text="",
+            icon="CLIPUV_HLT" if item.is_clipped else "CLIPUV_DEHLT",
+        )
+        toggle_clip.point_cloud = item.ifc_definition_id
+        toggle_clip.is_clipped = not item.is_clipped
 
         remove_op = row.operator("bonsai_pointclouds.remove_point_cloud", text="", icon="X")
         remove_op.point_cloud = item.ifc_definition_id

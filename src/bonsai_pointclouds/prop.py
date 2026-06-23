@@ -24,10 +24,69 @@ from bpy.props import (
     StringProperty,
     BoolProperty,
     IntProperty,
+    FloatProperty,
     CollectionProperty,
 )
 from typing import TYPE_CHECKING, Union
+from . import const
 
+
+# ------------------------------------------------------------------
+# Per-cloud setting update callbacks
+# These fire when the user edits a property in the panel.
+# They dispatch to the active backend (our viewer or PCV).
+# ------------------------------------------------------------------
+
+
+def _update_point_size(self: "PointCloud", _context: bpy.types.Context) -> None:
+    from .viewer import PointCloudViewer
+    # Our viewer reads point_size directly from the prop at draw time, so we
+    # only need to trigger a redraw.  For PCV, try to push the value.
+    PointCloudViewer.tag_redraw()
+    key = self.host_obj_name
+    if key and not PointCloudViewer.exists(key):
+        obj = bpy.data.objects.get(key)
+        if obj:
+            _try_set_pcv(obj, "point_size", self.point_size)
+
+
+def _update_opacity(self: "PointCloud", _context: bpy.types.Context) -> None:
+    key = self.host_obj_name
+    if not key:
+        return
+    from .viewer import PointCloudViewer
+    if PointCloudViewer.exists(key):
+        # Opacity is baked into vertex colors — needs a batch rebuild.
+        PointCloudViewer.set_opacity(key, self.opacity)
+    else:
+        obj = bpy.data.objects.get(key)
+        if obj:
+            _try_set_pcv(obj, "alpha", self.opacity)
+
+
+def _update_draw_on_top(self: "PointCloud", _context: bpy.types.Context) -> None:
+    from .viewer import PointCloudViewer
+    # Viewer reads draw_on_top from the prop at draw time — just redraw.
+    PointCloudViewer.tag_redraw()
+
+
+def _try_set_pcv(obj: "bpy.types.Object", attr: str, value) -> None:
+    """Best-effort: push a value to PCV shader or data props."""
+    props = getattr(obj, const.PCV_PROPERTY_GROUP, None)
+    if props is None:
+        return
+    for target in (getattr(props, const.PCV_SHADER_GROUP, None), props):
+        if target is not None and hasattr(target, attr):
+            try:
+                setattr(target, attr, value)
+            except (AttributeError, TypeError):
+                pass
+            break
+
+
+# ------------------------------------------------------------------
+# Property groups
+# ------------------------------------------------------------------
 
 class PointCloud(PropertyGroup):
     name: StringProperty(name="Name")
@@ -37,6 +96,34 @@ class PointCloud(PropertyGroup):
     is_loaded: BoolProperty(name="Is Loaded", default=False)
     has_clipbox: BoolProperty(name="Has Clip Box", default=False)
 
+    # Key into PointCloudViewer.clouds / host Blender object name.
+    # Set when the cloud is loaded; used by update callbacks.
+    host_obj_name: StringProperty(name="Host Object Name")
+
+    # Per-cloud rendering settings (apply to our viewer; best-effort for PCV).
+    point_size: IntProperty(
+        name="Point Size",
+        default=int(const.VIEWER_POINT_SIZE),
+        min=1,
+        max=50,
+        subtype="PIXEL",
+        update=_update_point_size,
+    )
+    opacity: FloatProperty(
+        name="Opacity",
+        default=1.0,
+        min=0.0,
+        max=1.0,
+        subtype="FACTOR",
+        update=_update_opacity,
+    )
+    draw_on_top: BoolProperty(
+        name="Draw on Top",
+        description="Disable depth testing so the cloud is always visible through geometry",
+        default=False,
+        update=_update_draw_on_top,
+    )
+
     if TYPE_CHECKING:
         name: str
         ifc_definition_id: int
@@ -44,6 +131,10 @@ class PointCloud(PropertyGroup):
         is_clipped: bool
         is_loaded: bool
         has_clipbox: bool
+        host_obj_name: str
+        point_size: int
+        opacity: float
+        draw_on_top: bool
 
 
 class BIMPointCloudProperties(PropertyGroup):

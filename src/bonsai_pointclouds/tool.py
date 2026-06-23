@@ -53,16 +53,38 @@ class PointCloud:
         PointCloudsData.load()
         props = cls.get_pointcloud_props()
         props.has_pcv = cls.has_pcv()
+
+        # Preserve per-cloud render settings across a refresh so the user does
+        # not lose their point_size/opacity/draw_on_top when re-importing.
+        saved = {
+            item.ifc_definition_id: {
+                "point_size": item.point_size,
+                "opacity": item.opacity,
+                "draw_on_top": item.draw_on_top,
+            }
+            for item in props.point_clouds
+        }
+
         props.point_clouds.clear()
         for pointcloud in PointCloudsData.data["point_clouds"]:
             new = props.point_clouds.add()
             new.ifc_definition_id = pointcloud["ifc_definition_id"]
             new.name = pointcloud["name"]
             element = tool.Ifc.get().by_id(new.ifc_definition_id)
-            new.is_loaded = cls.get_host_object(element) is not None
+            host = cls.get_host_object(element)
+            new.is_loaded = host is not None
             new.has_clipbox = cls.get_clipbox_object(element) is not None
             new.is_visible = cls.get_is_visible(element)
             new.is_clipped = cls.get_is_clipped(element)
+            # Restore render settings saved before the clear.
+            if new.ifc_definition_id in saved:
+                s = saved[new.ifc_definition_id]
+                new.point_size = s["point_size"]
+                new.opacity = s["opacity"]
+                new.draw_on_top = s["draw_on_top"]
+            # Link the prop item to its host object so update callbacks work.
+            if host is not None:
+                new.host_obj_name = host.name
 
     @classmethod
     def set_is_editing(cls, is_editing: bool) -> None:
@@ -203,9 +225,14 @@ class PointCloud:
 
     @classmethod
     def get_is_clipped(cls, element: ifcopenshell.entity_instance) -> bool:
-        """Whether PCV clipping is currently enabled for the cloud (session-only)."""
+        """Whether clipping is currently enabled for the cloud (session-only)."""
         obj = cls.get_host_object(element)
-        shader = cls.get_pcv_shader(obj) if obj else None
+        if obj is None:
+            return False
+        if PointCloudViewer.exists(obj.name):
+            entry = PointCloudViewer.clouds.get(obj.name)
+            return bool(entry and entry.get("clip_enabled", False))
+        shader = cls.get_pcv_shader(obj)
         if shader is None:
             return False
         return bool(getattr(shader, const.PCV_CLIP_ENABLED_PROP, False))
@@ -312,15 +339,26 @@ class PointCloud:
 
     @classmethod
     def _load_with_pcv(cls, pcv, obj, filepath: str, filetype: str) -> Optional[str]:
-        props = getattr(obj, const.PCV_PROPERTY_GROUP)
-        props.data.filepath = bpy.path.abspath(filepath)
-        props.data.filetype = filetype
-        pd = pcv.mechanist.PCVStoker.load(props, operator=None)
+        pcv_props = getattr(obj, const.PCV_PROPERTY_GROUP)
+        pcv_props.data.filepath = bpy.path.abspath(filepath)
+        pcv_props.data.filetype = filetype
+        pd = pcv.mechanist.PCVStoker.load(pcv_props, operator=None)
         if not pd:
             return "PCV could not read the point cloud data"
         pcv.mechanist.PCVMechanist.init()
         pcv.mechanist.PCVMechanist.data(obj, pd, draw=True)
         pcv.mechanist.PCVMechanist.tag_redraw()
+        # Link prop item to host object; apply saved opacity to the viewer.
+        ifc_id = obj.get(LINK_PROP)
+        if ifc_id is not None:
+            props = cls.get_pointcloud_props()
+            for item in props.point_clouds:
+                if item.ifc_definition_id == ifc_id:
+                    item.host_obj_name = obj.name
+                    from .prop import _try_set_pcv
+                    _try_set_pcv(obj, "point_size", item.point_size)
+                    _try_set_pcv(obj, "alpha", item.opacity)
+                    break
         return None
 
     @classmethod
@@ -334,6 +372,17 @@ class PointCloud:
         if coords is None or len(coords) == 0:
             return "No points found in file"
         PointCloudViewer.load(obj.name, coords, colors)
+        # Set host_obj_name so prop-lookup callbacks work; apply saved opacity.
+        # point_size and draw_on_top are read directly from props at draw time.
+        ifc_id = obj.get(LINK_PROP)
+        if ifc_id is not None:
+            props = cls.get_pointcloud_props()
+            for item in props.point_clouds:
+                if item.ifc_definition_id == ifc_id:
+                    item.host_obj_name = obj.name
+                    if item.opacity < 1.0:
+                        PointCloudViewer.set_opacity(obj.name, item.opacity)
+                    break
         return None
 
     @classmethod
@@ -442,11 +491,20 @@ class PointCloud:
     @classmethod
     def set_clipping(cls, element: ifcopenshell.entity_instance, is_clipped: bool) -> bool:
         host = cls.get_host_object(element)
-        shader = cls.get_pcv_shader(host) if host else None
-        if shader is None:
+        if host is None:
             return False
         cube = cls.get_clipbox_object(element)
         if is_clipped and cube is None:
+            return False
+
+        # Our viewer backend.
+        if PointCloudViewer.exists(host.name):
+            PointCloudViewer.set_clip(host.name, cube if is_clipped else None, is_clipped)
+            return True
+
+        # PCV backend.
+        shader = cls.get_pcv_shader(host)
+        if shader is None:
             return False
         # Disabling clipping ends a temporary view alignment: restore the
         # previous clip box transform if there was one.
