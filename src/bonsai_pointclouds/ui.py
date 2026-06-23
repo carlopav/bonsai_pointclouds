@@ -72,6 +72,11 @@ class BIM_PT_point_clouds(Panel):
             load_op = load.operator("bonsai_pointclouds.load_point_cloud_data", text="", icon="IMPORT")
             if active is not None:
                 load_op.point_cloud = active.ifc_definition_id
+            unload = row.row(align=True)
+            unload.enabled = active is not None and active.is_loaded
+            unload_op = unload.operator("bonsai_pointclouds.unload_point_cloud_data", text="", icon="UNLINKED")
+            if active is not None:
+                unload_op.point_cloud = active.ifc_definition_id
             align = row.row(align=True)
             align.enabled = active is not None
             align_op = align.operator("bonsai_pointclouds.align_clip_to_view", text="", icon="VIEW_CAMERA")
@@ -99,6 +104,36 @@ class BIM_PT_point_clouds(Panel):
             col.prop(active, "point_size")
             col.prop(active, "opacity")
             col.prop(active, "draw_on_top")
+
+
+class BIM_PT_point_cloud_export(Panel):
+    bl_label = "Rasterize and Export"
+    bl_idname = "BIM_PT_point_cloud_export"
+    bl_space_type = "PROPERTIES"
+    bl_region_type = "WINDOW"
+    bl_context = "scene"
+    bl_parent_id = "BIM_PT_tab_point_clouds"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    @classmethod
+    def poll(cls, context):
+        props = getattr(context.scene, "BIMPointCloudProperties", None)
+        return props is not None and props.is_editing
+
+    def draw(self, context):
+        exp = context.scene.BIMPointCloudExportProperties
+        layout = self.layout
+        col = layout.column(align=True)
+        col.prop(exp, "depth")
+        col.prop(exp, "resolution_mm")
+        col.prop(exp, "color_mode", text="Mode")
+        col.prop(exp, "background", text="Background")
+        layout.prop(exp, "filepath", text="")
+        layout.operator(
+            "bonsai_pointclouds.export_geotiff",
+            text="Export GeoTIFF",
+            icon="IMAGE_DATA",
+        )
 
 
 class BIM_UL_point_clouds(UIList):

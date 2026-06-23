@@ -19,7 +19,7 @@
 import bpy
 from bpy.app.handlers import persistent
 
-from . import data, operator, prop, ui
+from . import data, operator, prop, ui, geotiff, rasterize
 from .viewer import PointCloudViewer
 
 bl_info = {
@@ -37,12 +37,15 @@ bl_info = {
 
 classes = (
     prop.PointCloud,
+    prop.BIMPointCloudExportProperties,
     prop.BIMPointCloudProperties,
     operator.LoadPointClouds,
     operator.DisableEditing,
     operator.AddPointCloud,
     operator.RemovePointCloud,
     operator.LoadPointCloudData,
+    operator.UnloadPointCloudData,
+    operator.ExportPointCloudGeoTIFF,
     operator.TogglePointCloudVisibility,
     operator.CreateClipBox,
     operator.SelectClipBox,
@@ -50,6 +53,7 @@ classes = (
     operator.TogglePointCloudClipping,
     ui.BIM_PT_tab_point_clouds,
     ui.BIM_PT_point_clouds,
+    ui.BIM_PT_point_cloud_export,
     ui.BIM_UL_point_clouds,
 )
 
@@ -63,6 +67,7 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.BIMPointCloudProperties = bpy.props.PointerProperty(type=prop.BIMPointCloudProperties)
+    bpy.types.Scene.BIMPointCloudExportProperties = bpy.props.PointerProperty(type=prop.BIMPointCloudExportProperties)
     bpy.app.handlers.undo_post.append(refresh_point_clouds)
     bpy.app.handlers.redo_post.append(refresh_point_clouds)
     bpy.app.handlers.load_post.append(refresh_point_clouds)
@@ -76,5 +81,6 @@ def unregister():
             if handler in app_handler:
                 app_handler.remove(handler)
     del bpy.types.Scene.BIMPointCloudProperties
+    del bpy.types.Scene.BIMPointCloudExportProperties
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)

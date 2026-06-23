@@ -59,6 +59,11 @@ def load(point_cloud: type[PointCloud], element: ifcopenshell.entity_instance) -
     return error
 
 
+def unload(point_cloud: type[PointCloud], element: ifcopenshell.entity_instance) -> None:
+    point_cloud.unload(element)
+    point_cloud.sync_item(element)
+
+
 def toggle_visibility(
     point_cloud: type[PointCloud],
     element: ifcopenshell.entity_instance,
@@ -94,3 +99,14 @@ def align_clip_to_view(
     error = point_cloud.align_clip_to_view(element)
     point_cloud.sync_item(element)
     return error
+
+
+def export_geotiff(
+    point_cloud: type[PointCloud],
+    filepath: str,
+    depth: float,
+    resolution_mm: float,
+    mode: str,
+    background: str,
+) -> "str | None":
+    return point_cloud.export_geotiff(filepath, depth, resolution_mm, mode, background)

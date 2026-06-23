@@ -30,7 +30,10 @@ from pathlib import Path
 from typing import Optional
 from . import const
 from .data import PointCloudsData
+import numpy as np
 from .viewer import PointCloudViewer, read_ply
+from . import rasterize as _rasterize
+from . import geotiff as _geotiff
 
 
 # A custom Blender object property links a viewport object back to its IFC element.
@@ -363,6 +366,13 @@ class PointCloud:
         return cls._load_with_viewer(obj, filepath, filetype)
 
     @classmethod
+    def unload(cls, element: ifcopenshell.entity_instance) -> None:
+        """Free point cloud data from memory; host object and IFC element are kept."""
+        obj = cls.get_host_object(element)
+        if obj is not None:
+            cls.clear_representations(obj)
+
+    @classmethod
     def clear_representations(cls, obj: bpy.types.Object) -> None:
         """Remove this host's cloud from both backends (PCV cache and our viewer)."""
         PointCloudViewer.remove(obj.name)
@@ -577,6 +587,83 @@ class PointCloud:
         if m:
             m = list(m)
             obj.matrix_world = Matrix((m[0:4], m[4:8], m[8:12], m[12:16]))
+
+    # Export ---------------------------------------------------------------
+
+    @classmethod
+    def export_geotiff(cls, filepath: str, depth: float, resolution_mm: float, mode: str, background: str = "BLACK") -> Optional[str]:
+        """Rasterize all visible+loaded clouds onto the active ortho camera plane.
+
+        Returns None on success, or an error string.
+        """
+        cam = bpy.context.scene.camera
+        if cam is None or cam.type != "CAMERA":
+            return "No active camera in the scene"
+        if cam.data.type != "ORTHO":
+            return "Active camera must be orthographic"
+
+        # Camera extents
+        scene  = bpy.context.scene
+        rx, ry = scene.render.resolution_x, scene.render.resolution_y
+        ortho  = cam.data.ortho_scale
+        if rx >= ry:
+            cam_w, cam_h = ortho, ortho * (ry / rx)
+        else:
+            cam_w, cam_h = ortho * (rx / ry), ortho
+
+        # Collect points from all visible + loaded clouds
+        clouds = cls._collect_visible_clouds()
+        if not clouds:
+            return "No visible loaded point clouds found"
+
+        pixel_size = resolution_mm / 1000.0  # mm → metres
+
+        # cam_to_world as numpy array
+        cam_mat = np.array(cam.matrix_world, dtype=np.float64)
+
+        pixels, x_origin, y_origin = _rasterize.rasterize(
+            clouds       = clouds,
+            cam_to_world = cam_mat,
+            cam_width    = cam_w,
+            cam_height   = cam_h,
+            depth        = depth,
+            pixel_size   = pixel_size,
+            mode         = mode,
+            background   = background,
+        )
+
+        abs_path = bpy.path.abspath(filepath)
+        _geotiff.write(
+            filepath   = abs_path,
+            pixels     = pixels,
+            x_origin   = x_origin,
+            y_origin   = y_origin,
+            pixel_size = pixel_size,
+            mode       = mode,
+        )
+        return None
+
+    @classmethod
+    def _collect_visible_clouds(cls) -> list:
+        """Return list of (coords_world, colors) for all visible+loaded viewer clouds."""
+        result = []
+        for key, entry in PointCloudViewer.clouds.items():
+            if not entry.get("draw", True):
+                continue
+            coords = entry.get("coords")
+            colors = entry.get("colors")
+            if coords is None or len(coords) == 0:
+                continue
+            obj = bpy.data.objects.get(key)
+            if obj is None:
+                continue
+            # coords are stored in object local space — bring to world space
+            mat  = np.array(obj.matrix_world, dtype=np.float64)
+            ones = np.ones((len(coords), 1), dtype=np.float64)
+            pts_h = np.concatenate([coords.astype(np.float64), ones], axis=1)
+            world_coords = (mat @ pts_h.T).T[:, :3].astype(np.float32)
+            result.append((world_coords, colors))
+        return result
 
     @staticmethod
     def _build_unit_cube(mesh: bpy.types.Mesh) -> None:

@@ -147,6 +147,47 @@ class AlignClipToView(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class UnloadPointCloudData(bpy.types.Operator):
+    bl_idname = "bonsai_pointclouds.unload_point_cloud_data"
+    bl_label = "Unload Point Cloud"
+    bl_description = "Free point cloud data from memory without removing it from the IFC file"
+    bl_options = {"REGISTER", "UNDO"}
+    point_cloud: bpy.props.IntProperty()
+
+    def execute(self, context):
+        element = tool.Ifc.get().by_id(self.point_cloud)
+        core.unload(PointCloud, element)
+        return {"FINISHED"}
+
+
+class ExportPointCloudGeoTIFF(bpy.types.Operator):
+    bl_idname = "bonsai_pointclouds.export_geotiff"
+    bl_label = "Export GeoTIFF Section"
+    bl_description = "Rasterize visible point clouds onto the active ortho camera plane and export as GeoTIFF"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        exp = context.scene.BIMPointCloudExportProperties
+        filepath = exp.filepath
+        if not filepath:
+            self.report({"ERROR"}, "Set an output file path first")
+            return {"CANCELLED"}
+        error = core.export_geotiff(
+            PointCloud,
+            filepath      = filepath,
+            depth         = exp.depth,
+            resolution_mm = exp.resolution_mm,
+            mode          = exp.color_mode,
+            background    = exp.background,
+        )
+        if error:
+            self.report({"ERROR"}, error)
+            return {"CANCELLED"}
+        abs_path = bpy.path.abspath(filepath)
+        self.report({"INFO"}, f"GeoTIFF saved: {abs_path}")
+        return {"FINISHED"}
+
+
 class TogglePointCloudClipping(bpy.types.Operator):
     bl_idname = "bonsai_pointclouds.toggle_clipping"
     bl_label = "Toggle Point Cloud Clipping"

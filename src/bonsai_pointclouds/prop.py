@@ -25,6 +25,7 @@ from bpy.props import (
     BoolProperty,
     IntProperty,
     FloatProperty,
+    EnumProperty,
     CollectionProperty,
 )
 from typing import TYPE_CHECKING, Union
@@ -158,6 +159,53 @@ class PointCloud(PropertyGroup):
         point_size: int
         opacity: float
         draw_on_top: bool
+
+
+class BIMPointCloudExportProperties(PropertyGroup):
+    depth: FloatProperty(
+        name="Depth",
+        description="Slab thickness to capture (metres)",
+        default=0.05,
+        min=0.001,
+        max=100.0,
+        unit="LENGTH",
+    )
+    color_mode: EnumProperty(
+        name="Color Mode",
+        items=[
+            ("L",   "Grayscale", "Density map — bright = more points"),
+            ("RGB", "RGB",       "Average colour of points per pixel"),
+        ],
+        default="L",
+    )
+    resolution_mm: FloatProperty(
+        name="Resolution (mm/px)",
+        description="Ground sampling distance in millimetres per pixel",
+        default=5.0,
+        min=0.1,
+        max=1000.0,
+    )
+    background: EnumProperty(
+        name="Background",
+        items=[
+            ("TRANSPARENT", "Transparent", "Empty pixels are transparent (adds alpha channel)"),
+            ("WHITE",       "White",       "Empty pixels are white"),
+            ("BLACK",       "Black",       "Empty pixels are black"),
+        ],
+        default="TRANSPARENT",
+    )
+    filepath: StringProperty(
+        name="Output File",
+        subtype="FILE_PATH",
+        default="//pointcloud_section.tif",
+    )
+
+    if TYPE_CHECKING:
+        depth: float
+        color_mode: str
+        resolution_mm: float
+        background: str
+        filepath: str
 
 
 class BIMPointCloudProperties(PropertyGroup):
