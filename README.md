@@ -106,6 +106,7 @@ All writes go through `ifcopenshell.api` (`root.create_entity`, `document.add_in
 - [x] Persistent host (IfcAnnotation + placement) reloadable in position
 - [x] Built-in GPU fallback for PLY when PCV is not installed (viewer.py)
 - [x] Align clip box to the active drawing view (extent + shallow depth slab)
+- [ ] Migrate to the PCV 3.8 public API (`pcv.draw_file` / `draw` / `erase` / `properties`) instead of internal `PCVStoker`/`PCVMechanist`
 - [ ] Built-in clip box for the GPU viewer (minimal clipping without PCV)
 - [ ] Test coverage for the `core` logic
 - [ ] Georeference offset handling (optional — many survey clouds use a local frame)
