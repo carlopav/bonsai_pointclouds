@@ -8,6 +8,12 @@ It loads point clouds referenced from the IFC model, positions them, and manages
 
 ![Demo](media/bonsai-pcv.gif)
 
+## GeoTIFF Export
+
+![GeoTIFF export panel](media/geotiff-export-panel.png)
+
+Export a georeferenced raster from the active orthographic view — useful for overlaying point cloud density maps onto drawings or GIS tools. The panel (under **Reference and Export**) lets you set depth, mode (Grayscale / RGB), and background (Black / White / Transparent).
+
 ## Features
 
 - ✅ Dedicated **Point Clouds** panel in Bonsai's "Drawings and Documents" tab
