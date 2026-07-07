@@ -40,6 +40,32 @@ def _add_annotation(ifc: ifcopenshell.file, name: str) -> ifcopenshell.entity_in
     return element
 
 
+def _get_parent_group(ifc: ifcopenshell.file) -> ifcopenshell.entity_instance:
+    """Inline of tool.PointCloud.get_parent_group() — pure ifcopenshell."""
+    for group in ifc.by_type("IfcGroup"):
+        if group.Name == const.PARENT_NAME and group.ObjectType == const.PARENT_NAME:
+            return group
+    group = ifcopenshell.api.run("group.add_group", ifc)
+    ifcopenshell.api.run(
+        "group.edit_group", ifc, group=group,
+        attributes={"Name": const.PARENT_NAME, "ObjectType": const.PARENT_NAME},
+    )
+    return group
+
+
+def _get_parent_document(ifc: ifcopenshell.file) -> ifcopenshell.entity_instance:
+    """Inline of tool.PointCloud.get_parent_document() — pure ifcopenshell (IFC4)."""
+    for information in ifc.by_type("IfcDocumentInformation"):
+        if information.Name == const.PARENT_NAME and information.Scope == const.PARENT_NAME:
+            return information
+    information = ifcopenshell.api.run("document.add_information", ifc)
+    ifcopenshell.api.run(
+        "document.edit_information", ifc, information=information,
+        attributes={"Identification": const.PARENT_NAME, "Name": const.PARENT_NAME, "Scope": const.PARENT_NAME},
+    )
+    return information
+
+
 def _add_document_reference(
     ifc: ifcopenshell.file,
     element: ifcopenshell.entity_instance,
@@ -47,7 +73,7 @@ def _add_document_reference(
 ) -> None:
     """Replicate add_document_reference (without CreationTime for schema-neutral test)."""
     ref_name = f"{const.DOCUMENT_REF_PREFIX}{element.Name}"
-    information = ifcopenshell.api.run("document.add_information", ifc)
+    information = ifcopenshell.api.run("document.add_information", ifc, parent=_get_parent_document(ifc))
     information.Name = ref_name
     reference = ifcopenshell.api.run("document.add_reference", ifc, information=information)
     reference.Name = ref_name
@@ -130,7 +156,7 @@ def test_document_reference_naming(ifc, element):
 
 def test_document_information_naming(ifc, element):
     _add_document_reference(ifc, element, "./clouds/scan_a.ply")
-    infos = ifc.by_type("IfcDocumentInformation")
+    infos = [i for i in ifc.by_type("IfcDocumentInformation") if i.Name != const.PARENT_NAME]
     assert len(infos) == 1
     assert infos[0].Name == f"{const.DOCUMENT_REF_PREFIX}ScanA"
 
@@ -187,7 +213,10 @@ def test_remove_documents_removes_reference_from_model(ifc, element_with_doc):
 
 def test_remove_documents_removes_information_from_model(ifc, element_with_doc):
     _remove_documents(ifc, element_with_doc)
-    assert len(ifc.by_type("IfcDocumentInformation")) == 0
+    # Only the POINTCLOUDS parent information remains (never removed, like
+    # Bonsai's DRAWINGS parent).
+    infos = ifc.by_type("IfcDocumentInformation")
+    assert [i.Name for i in infos] == [const.PARENT_NAME]
 
 
 def test_remove_documents_location_returns_empty(ifc, element_with_doc):
@@ -202,6 +231,82 @@ def test_remove_documents_does_not_affect_other_clouds(ifc):
     _add_document_reference(ifc, el_b, "./clouds/b.ply")
     _remove_documents(ifc, el_a)
     assert _get_location(el_b) == "./clouds/b.ply"
+
+
+# ---------------------------------------------------------------------------
+# POINTCLOUDS parent group / document hierarchy (mirrors Bonsai's DRAWINGS
+# convention from IfcOpenShell PR #7093)
+# ---------------------------------------------------------------------------
+
+def test_parent_group_attributes(ifc):
+    group = _get_parent_group(ifc)
+    assert group.is_a("IfcGroup")
+    assert group.Name == const.PARENT_NAME
+    assert group.ObjectType == const.PARENT_NAME
+
+
+def test_parent_group_is_created_once(ifc):
+    first = _get_parent_group(ifc)
+    second = _get_parent_group(ifc)
+    assert first == second
+    assert len(ifc.by_type("IfcGroup")) == 1
+
+
+def test_annotation_assigned_to_parent_group(ifc, element):
+    ifcopenshell.api.run("group.assign_group", ifc, group=_get_parent_group(ifc), products=[element])
+    rels = [r for r in ifc.by_type("IfcRelAssignsToGroup") if r.RelatingGroup == _get_parent_group(ifc)]
+    assert len(rels) == 1
+    assert element in rels[0].RelatedObjects
+
+
+def test_removing_annotation_keeps_parent_group(ifc, element):
+    group = _get_parent_group(ifc)
+    ifcopenshell.api.run("group.assign_group", ifc, group=group, products=[element])
+    ifcopenshell.api.run("root.remove_product", ifc, product=element)
+    assert len(ifc.by_type("IfcAnnotation")) == 0
+    assert _get_parent_group(ifc) == group  # still there, found not re-created
+    assert len(ifc.by_type("IfcGroup")) == 1
+
+
+def test_parent_document_attributes(ifc):
+    information = _get_parent_document(ifc)
+    assert information.Identification == const.PARENT_NAME
+    assert information.Name == const.PARENT_NAME
+    assert information.Scope == const.PARENT_NAME
+
+
+def test_parent_document_is_created_once(ifc):
+    el_a = _add_annotation(ifc, "ScanA")
+    el_b = _add_annotation(ifc, "ScanB")
+    _add_document_reference(ifc, el_a, "./clouds/a.ply")
+    _add_document_reference(ifc, el_b, "./clouds/b.ply")
+    parents = [i for i in ifc.by_type("IfcDocumentInformation") if i.Name == const.PARENT_NAME]
+    assert len(parents) == 1
+
+
+def test_cloud_information_nested_under_parent(ifc, element_with_doc):
+    rels = ifc.by_type("IfcDocumentInformationRelationship")
+    assert len(rels) == 1
+    assert rels[0].RelatingDocument.Name == const.PARENT_NAME
+    child_names = [d.Name for d in rels[0].RelatedDocuments]
+    assert child_names == [f"{const.DOCUMENT_REF_PREFIX}ScanA"]
+
+
+def test_remove_documents_keeps_other_children_nested(ifc):
+    el_a = _add_annotation(ifc, "ScanA")
+    el_b = _add_annotation(ifc, "ScanB")
+    _add_document_reference(ifc, el_a, "./clouds/a.ply")
+    _add_document_reference(ifc, el_b, "./clouds/b.ply")
+    _remove_documents(ifc, el_a)
+    rels = ifc.by_type("IfcDocumentInformationRelationship")
+    assert len(rels) == 1
+    child_names = [d.Name for d in rels[0].RelatedDocuments]
+    assert child_names == [f"{const.DOCUMENT_REF_PREFIX}ScanB"]
+
+
+def test_remove_documents_purges_empty_parent_relationship(ifc, element_with_doc):
+    _remove_documents(ifc, element_with_doc)
+    assert len(ifc.by_type("IfcDocumentInformationRelationship")) == 0
 
 
 # ---------------------------------------------------------------------------

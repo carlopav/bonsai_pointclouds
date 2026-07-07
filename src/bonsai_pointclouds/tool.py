@@ -122,8 +122,44 @@ class PointCloud:
         container = cls.get_default_container()
         if container is not None:
             tool.Ifc.run("spatial.assign_container", products=[element], relating_structure=container)
+        tool.Ifc.run("group.assign_group", group=cls.get_parent_group(), products=[element])
         cls.add_document_reference(element, location)
         return element
+
+    @classmethod
+    def get_parent_group(cls) -> ifcopenshell.entity_instance:
+        """The IfcGroup collecting all point clouds (same convention as Bonsai's
+        DRAWINGS group), created on first use."""
+        for group in tool.Ifc.get().by_type("IfcGroup"):
+            if group.Name == const.PARENT_NAME and group.ObjectType == const.PARENT_NAME:
+                return group
+        group = tool.Ifc.run("group.add_group")
+        tool.Ifc.run(
+            "group.edit_group",
+            group=group,
+            attributes={"Name": const.PARENT_NAME, "ObjectType": const.PARENT_NAME},
+        )
+        return group
+
+    @classmethod
+    def get_parent_document(cls) -> ifcopenshell.entity_instance:
+        """The IfcDocumentInformation collecting all point cloud documents (same
+        convention as Bonsai's DRAWINGS document), created on first use."""
+        for information in tool.Ifc.get().by_type("IfcDocumentInformation"):
+            if information.Name == const.PARENT_NAME and information.Scope == const.PARENT_NAME:
+                return information
+        information = tool.Ifc.run("document.add_information")
+        id_attribute = "DocumentId" if tool.Ifc.get_schema() == "IFC2X3" else "Identification"
+        tool.Ifc.run(
+            "document.edit_information",
+            information=information,
+            attributes={
+                id_attribute: const.PARENT_NAME,
+                "Name": const.PARENT_NAME,
+                "Scope": const.PARENT_NAME,
+            },
+        )
+        return information
 
     @classmethod
     def get_default_container(cls) -> Optional[ifcopenshell.entity_instance]:
@@ -138,7 +174,7 @@ class PointCloud:
     @classmethod
     def add_document_reference(cls, element: ifcopenshell.entity_instance, location: str) -> None:
         ref_name = f"{const.DOCUMENT_REF_PREFIX}{element.Name}"
-        information = tool.Ifc.run("document.add_information")
+        information = tool.Ifc.run("document.add_information", parent=cls.get_parent_document())
         information.Name = ref_name
         if tool.Ifc.get_schema() != "IFC2X3":
             information.CreationTime = datetime.now().isoformat(timespec="seconds")

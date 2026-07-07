@@ -90,6 +90,7 @@ Each cloud uses **standard IFC entities only** (no custom pset):
 - **IfcAnnotation** (`ObjectType = "PointCloud"`) — placeholder with `IfcObjectPlacement` (persistent position; Blender object named `PointCloud/...`).
 - **IfcDocumentReference** (via `IfcRelAssociatesDocument`) — file path in `Location`; named `POINTCLOUD_...`.
 - **IfcDocumentInformation.CreationTime** — import date.
+- **IfcGroup `POINTCLOUDS`** — every cloud annotation is assigned to this parent group, and every cloud's `IfcDocumentInformation` is nested under a `POINTCLOUDS` parent document, mirroring Bonsai's `DRAWINGS` convention ([IfcOpenShell#7093](https://github.com/IfcOpenShell/IfcOpenShell/pull/7093)).
 
 Session-only state (NOT persisted): visibility (PCV erase / viewer draw flag) and clipping (the clip box is a 3 m Blender-only cube).
 

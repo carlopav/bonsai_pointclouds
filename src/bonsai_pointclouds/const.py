@@ -30,6 +30,11 @@ ANNOTATION_OBJECT_TYPE = "PointCloud"
 # Prefix for the IfcDocumentReference / IfcDocumentInformation name.
 DOCUMENT_REF_PREFIX = "POINTCLOUD_"
 
+# Parent IfcGroup and IfcDocumentInformation collecting all point clouds,
+# mirroring Bonsai's DRAWINGS convention (IfcOpenShell PR #7093): the group is
+# matched on Name + ObjectType, the document information on Name + Scope.
+PARENT_NAME = "POINTCLOUDS"
+
 # No custom property set: the file path lives on IfcDocumentReference.Location
 # and the scan date on IfcDocumentInformation.CreationTime (standard IFC). The
 # visibility/clipping state is session-only (derived from PCV), not persisted.
