@@ -668,7 +668,7 @@ class PointCloud:
             background   = background,
         )
 
-        abs_path = bpy.path.abspath(filepath)
+        abs_path = cls.get_absolute_location(filepath[2:] if filepath.startswith("//") else filepath)
         _geotiff.write(
             filepath   = abs_path,
             pixels     = pixels,

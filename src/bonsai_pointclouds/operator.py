@@ -183,7 +183,7 @@ class ExportPointCloudGeoTIFF(bpy.types.Operator):
         if error:
             self.report({"ERROR"}, error)
             return {"CANCELLED"}
-        abs_path = bpy.path.abspath(filepath)
+        abs_path = PointCloud.get_absolute_location(filepath[2:] if filepath.startswith("//") else filepath)
         self.report({"INFO"}, f"GeoTIFF saved: {abs_path}")
         return {"FINISHED"}
 

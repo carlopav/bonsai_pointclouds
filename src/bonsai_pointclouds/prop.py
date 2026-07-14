@@ -197,7 +197,7 @@ class BIMPointCloudExportProperties(PropertyGroup):
     filepath: StringProperty(
         name="Output File",
         subtype="FILE_PATH",
-        default="//pointcloud_section.tif",
+        default="pointcloud_section.tif",
     )
 
     if TYPE_CHECKING:
