@@ -183,3 +183,15 @@ def test_geokey_raster_type(tif):
     gk = read_shorts(data, tags, 34735)
     assert gk[8] == 1025   # GTRasterTypeGeoKey ID
     assert gk[11] == 1     # RasterPixelIsArea
+
+
+def test_geokey_linear_units(tif):
+    # ProjLinearUnitsGeoKey must declare metres so readers can resolve a
+    # position under the user-defined model type (BricsCAD rejects the file
+    # as ungeoreferenced without it).
+    data = tif(np.zeros((4, 4), dtype=np.uint8))
+    tags = parse_ifd(data)
+    gk = read_shorts(data, tags, 34735)
+    assert gk[3] == 3        # NKeys
+    assert gk[12] == 3076    # ProjLinearUnitsGeoKey ID
+    assert gk[15] == 9001    # Linear_Meter

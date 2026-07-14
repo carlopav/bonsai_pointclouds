@@ -184,17 +184,21 @@ def write(
         bps_off  = None
         bps_data = b""
 
-    # GeoKeyDirectoryTag: header (4 SHORTs) + 2 GeoKeys (4 SHORTs each) = 12 SHORTs
-    # GTModelTypeGeoKey (1024) = 32767 → user-defined (project-local, no CRS)
-    # GTRasterTypeGeoKey (1025) = 1    → RasterPixelIsArea
+    # GeoKeyDirectoryTag: header (4 SHORTs) + 3 GeoKeys (4 SHORTs each) = 16 SHORTs
+    # GTModelTypeGeoKey (1024)     = 32767 → user-defined (project-local, no CRS)
+    # GTRasterTypeGeoKey (1025)    = 1     → RasterPixelIsArea
+    # ProjLinearUnitsGeoKey (3076) = 9001  → Linear_Meter (declares the unit for
+    #   ModelPixelScale/ModelTiepoint under a user-defined model type; without it
+    #   some readers, e.g. BricsCAD, cannot resolve a position and reject the file)
     # NOTE: value 0 (ModelTypeUndefined) triggers a fatal parse error in BricsCAD
     geokey_off  = cur
-    geokey_data = struct.pack("<HHHHHHHHHHHH",
-        1, 1, 0, 2,        # KeyDirectoryVersion=1, KeyRevision=1, Minor=0, NKeys=2
+    geokey_data = struct.pack("<HHHHHHHHHHHHHHHH",
+        1, 1, 0, 3,        # KeyDirectoryVersion=1, KeyRevision=1, Minor=0, NKeys=3
         1024, 0, 1, 32767, # GTModelTypeGeoKey = 32767 (user-defined / local)
         1025, 0, 1, 1,     # GTRasterTypeGeoKey = 1 (PixelIsArea)
+        3076, 0, 1, 9001,  # ProjLinearUnitsGeoKey = 9001 (metre)
     )
-    cur += len(geokey_data)   # 24 bytes
+    cur += len(geokey_data)   # 32 bytes
 
     # ModelPixelScaleTag: (ScaleX, ScaleY, ScaleZ) — 3 DOUBLEs
     px_scale_off  = cur
@@ -234,7 +238,7 @@ def write(
     if has_alpha:
         # ExtraSamples = 2 (unassociated / straight alpha)
         entries.append(_ifd_inline_short(_TAG_EXTRA_SAMPLES, 2))
-    entries.append(_ifd_offset      (_TAG_GEO_KEY_DIRECTORY, _SHORT,  12, geokey_off))
+    entries.append(_ifd_offset      (_TAG_GEO_KEY_DIRECTORY, _SHORT,  16, geokey_off))
     entries.append(_ifd_offset      (_TAG_MODEL_PIXEL_SCALE, _DOUBLE, 3, px_scale_off))
     entries.append(_ifd_offset      (_TAG_MODEL_TIEPOINT,    _DOUBLE, 6, tiepoint_off))
 
