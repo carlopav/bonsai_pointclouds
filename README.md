@@ -2,7 +2,7 @@
 
 Integration between **Bonsai** (IFC models in Blender) and **Point Cloud Visualizer** (Jakub Uhlík).
 
-It loads point clouds referenced from the IFC model, positions them, and manages a clip box for clipping in Blender — with a built-in GPU fallback viewer when PCV is not installed.
+It loads point clouds referenced from the IFC model, positions them, and manages a clip box for clipping in Blender. A built-in GPU viewer handles display and clipping standalone; Point Cloud Visualizer is an optional, preferred-when-present backend for extra formats and performance.
 
 ## Demo
 
@@ -19,8 +19,8 @@ Export a georeferenced raster from the active orthographic view — useful for o
 - ✅ Dedicated **Point Clouds** panel in Bonsai's "Drawings and Documents" tab
 - ✅ Load point clouds via PCV (PLY, LAS, LAZ, E57) or the built-in viewer (PLY)
 - ✅ Persistent host object in the IFC (IfcAnnotation + placement), reloadable in position
-- ✅ Clip box (3 m cube) driving PCV clipping; select/show operator
-- ✅ Show/hide via PCV erase (not object hiding)
+- ✅ Clip box (3 m cube) driving clipping on either backend (built-in GPU viewer or PCV); select/show operator
+- ✅ Show/hide via PCV erase, or the viewer's draw flag (not object hiding)
 - ✅ Undo/redo through Bonsai transactions
 - ✅ Standard IFC entities only — no custom property set
 
@@ -32,16 +32,22 @@ Export a georeferenced raster from the active orthographic view — useful for o
 
 ## Visualization backend
 
-The add-on uses one of two backends, chosen automatically:
+The add-on works standalone: the built-in GPU viewer (`viewer.py`) is a fully
+functional backend on its own, including clip-box clipping (evaluated in the
+vertex shader via a `u_local_to_clip` uniform — see `PointCloudViewer.set_clip()`).
+Point Cloud Visualizer is optional and, when installed, is preferred automatically
+(`tool.py`'s `load()` picks PCV over the built-in viewer whenever both are present)
+for its GPU performance on large clouds and its wider format support — not because
+the add-on depends on it.
 
 | | With **Point Cloud Visualizer** | Without PCV (built-in viewer) |
 |---|---|---|
 | Formats | PLY, LAS, LAZ, E57 | **PLY only** |
 | Rendering / performance | full GPU shader, large clouds | minimal GPU viewer (preview) |
-| **Clipping** (clip box) | ✅ | ❌ not available |
+| **Clipping** (clip box) | ✅ | ✅ (built into the GPU viewer, no PCV needed) |
 | Per-point colors | ✅ | only if the PLY contains colors |
 
-The built-in viewer is a fallback so you are not left empty-handed when PCV is missing. **For the full experience, Point Cloud Visualizer is strongly recommended.**
+The built-in viewer works fully on its own. **Point Cloud Visualizer remains a recommended add-on** for large clouds and non-PLY formats.
 
 ## ⭐ Recommended: Point Cloud Visualizer (Jakub Uhlík)
 
@@ -82,7 +88,7 @@ src/bonsai_pointclouds/
 
 1. In the panel, click the **import** icon to load the referenced clouds, then **+** to add one (file dialog PLY/LAS/LAZ/E57).
 2. Select a cloud and click **Load** (top, next to Add) to display it in the viewport.
-3. Per cloud in the list: **visibility**, **create/select clip box**, **enable/disable clipping** (PCV only), **remove**.
+3. Per cloud in the list: **visibility**, **create/select clip box**, **enable/disable clipping** (works on both backends), **remove**.
 
 ## Data architecture (persistent in the IFC)
 
@@ -103,7 +109,7 @@ All writes go through `ifcopenshell.api` (`root.create_entity`, `document.add_in
 - The host object is linked to the IfcAnnotation (`tool.Ifc.link`) → Bonsai persists its placement; the clip box is session-only.
 - Visibility via PCV: the `draw` flag in `PCVMechanist.cache` (erase), not object hiding.
 - PCV API: load `PCVStoker.load()` + `PCVMechanist`, clip via `shader.clip_planes_from_bbox_object`.
-- Built-in viewer (`viewer.py`): a single `SpaceView3D` draw handler draws a `POINTS` batch (Blender's `FLAT_COLOR` shader) per cloud using the host's `matrix_world`; points/colors are parsed from PLY into NumPy.
+- Built-in viewer (`viewer.py`): a single `SpaceView3D` draw handler draws a `POINTS` batch through a custom GLSL shader (`gpu.types.GPUShaderCreateInfo`) per cloud using the host's `matrix_world`; the shader sets point size from a uniform and evaluates clip-box masking on the GPU (`u_local_to_clip`), with a second variant for `draw_on_top`. Points/colors are parsed from PLY into NumPy.
 
 ## TODO
 
@@ -113,16 +119,16 @@ All writes go through `ifcopenshell.api` (`root.create_entity`, `document.add_in
 - [x] Persistent host (IfcAnnotation + placement) reloadable in position
 - [x] Built-in GPU fallback for PLY when PCV is not installed (viewer.py)
 - [x] Align clip box to the active drawing view (extent + shallow depth slab)
+- [x] Built-in clip box for the GPU viewer (clipping works standalone, without PCV)
+- [x] Test coverage for the `core` logic
 - [ ] Migrate to the PCV 3.8 public API (`pcv.draw_file` / `draw` / `erase` / `properties`) instead of internal `PCVStoker`/`PCVMechanist`
-- [ ] Built-in clip box for the GPU viewer (minimal clipping without PCV)
-- [ ] Test coverage for the `core` logic
 - [ ] Georeference offset handling (optional — many survey clouds use a local frame)
 - [ ] Support for ASCII formats (XYZ, PTS)
 
 ### Toward an upstream Bonsai PR
 
-- [ ] Make the free GPU viewer the primary backend (PCV optional acceleration), incl. clipping
-- [ ] Tests on the `core` modules
+- [x] The free GPU viewer is a fully standalone backend, incl. clipping; PCV is optional acceleration (preferred automatically when installed, for performance and format support)
+- [x] Tests on the `core` modules
 - [ ] Optional georeference/false-origin support
 
 ## License

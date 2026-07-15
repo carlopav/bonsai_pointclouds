@@ -7,19 +7,22 @@ directly, without Blender, to verify the IFC model structure we produce.
 We also inline get_location() / remove_documents() logic (4-line functions that
 are pure ifcopenshell) so they can run outside Blender.
 """
+
+import pathlib
+import sys
+
 import ifcopenshell
 import ifcopenshell.api
 import pytest
 
 # const.py has no Blender dependency — import it directly
-import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "src" / "bonsai_pointclouds"))
 import const
-
 
 # ---------------------------------------------------------------------------
 # Helpers that mirror tool.py without the bonsai.tool wrapper
 # ---------------------------------------------------------------------------
+
 
 def _create_ifc4() -> ifcopenshell.file:
     ifc = ifcopenshell.file(schema="IFC4")
@@ -29,6 +32,11 @@ def _create_ifc4() -> ifcopenshell.file:
 
 def _create_ifc2x3() -> ifcopenshell.file:
     ifc = ifcopenshell.file(schema="IFC2X3")
+    # IFC2X3 requires an owner history user/application before any root.create_entity call.
+    person = ifcopenshell.api.run("owner.add_person", ifc)
+    organisation = ifcopenshell.api.run("owner.add_organisation", ifc)
+    ifcopenshell.api.run("owner.add_person_and_organisation", ifc, person=person, organisation=organisation)
+    ifcopenshell.api.run("owner.add_application", ifc)
     ifcopenshell.api.run("root.create_entity", ifc, ifc_class="IfcProject", name="Test")
     return ifc
 
@@ -47,21 +55,26 @@ def _get_parent_group(ifc: ifcopenshell.file) -> ifcopenshell.entity_instance:
             return group
     group = ifcopenshell.api.run("group.add_group", ifc)
     ifcopenshell.api.run(
-        "group.edit_group", ifc, group=group,
+        "group.edit_group",
+        ifc,
+        group=group,
         attributes={"Name": const.PARENT_NAME, "ObjectType": const.PARENT_NAME},
     )
     return group
 
 
 def _get_parent_document(ifc: ifcopenshell.file) -> ifcopenshell.entity_instance:
-    """Inline of tool.PointCloud.get_parent_document() — pure ifcopenshell (IFC4)."""
+    """Inline of tool.PointCloud.get_parent_document() — pure ifcopenshell."""
     for information in ifc.by_type("IfcDocumentInformation"):
         if information.Name == const.PARENT_NAME and information.Scope == const.PARENT_NAME:
             return information
     information = ifcopenshell.api.run("document.add_information", ifc)
+    id_attribute = "DocumentId" if ifc.schema == "IFC2X3" else "Identification"
     ifcopenshell.api.run(
-        "document.edit_information", ifc, information=information,
-        attributes={"Identification": const.PARENT_NAME, "Name": const.PARENT_NAME, "Scope": const.PARENT_NAME},
+        "document.edit_information",
+        ifc,
+        information=information,
+        attributes={id_attribute: const.PARENT_NAME, "Name": const.PARENT_NAME, "Scope": const.PARENT_NAME},
     )
     return information
 
@@ -100,7 +113,10 @@ def _remove_documents(
         if not rel.is_a("IfcRelAssociatesDocument"):
             continue
         reference = rel.RelatingDocument
-        information = reference.ReferencedDocument  # IFC4 only in this test
+        if ifc.schema == "IFC2X3":
+            information = (reference.ReferenceToDocument or [None])[0]
+        else:
+            information = reference.ReferencedDocument
         if information:
             ifcopenshell.api.run("document.remove_information", ifc, information=information)
         else:
@@ -110,6 +126,7 @@ def _remove_documents(
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def ifc():
@@ -127,9 +144,26 @@ def element_with_doc(ifc, element):
     return element
 
 
+@pytest.fixture
+def ifc2x3():
+    return _create_ifc2x3()
+
+
+@pytest.fixture
+def element_ifc2x3(ifc2x3):
+    return _add_annotation(ifc2x3, "ScanA")
+
+
+@pytest.fixture
+def element_with_doc_ifc2x3(ifc2x3, element_ifc2x3):
+    _add_document_reference(ifc2x3, element_ifc2x3, "./clouds/scan_a.ply")
+    return element_ifc2x3
+
+
 # ---------------------------------------------------------------------------
 # IfcAnnotation structure
 # ---------------------------------------------------------------------------
+
 
 def test_annotation_ifc_class(element):
     assert element.is_a("IfcAnnotation")
@@ -146,6 +180,7 @@ def test_annotation_name(element):
 # ---------------------------------------------------------------------------
 # Document reference structure
 # ---------------------------------------------------------------------------
+
 
 def test_document_reference_naming(ifc, element):
     _add_document_reference(ifc, element, "./clouds/scan_a.ply")
@@ -178,6 +213,7 @@ def test_association_links_element_to_reference(ifc, element):
 # get_location
 # ---------------------------------------------------------------------------
 
+
 def test_get_location_returns_path(element_with_doc):
     assert _get_location(element_with_doc) == "./clouds/scan_a.ply"
 
@@ -199,10 +235,10 @@ def test_get_location_multiple_clouds_independent(ifc):
 # remove_documents
 # ---------------------------------------------------------------------------
 
+
 def test_remove_documents_clears_association(ifc, element_with_doc):
     _remove_documents(ifc, element_with_doc)
-    rels = [r for r in getattr(element_with_doc, "HasAssociations", [])
-            if r.is_a("IfcRelAssociatesDocument")]
+    rels = [r for r in getattr(element_with_doc, "HasAssociations", []) if r.is_a("IfcRelAssociatesDocument")]
     assert len(rels) == 0
 
 
@@ -237,6 +273,7 @@ def test_remove_documents_does_not_affect_other_clouds(ifc):
 # POINTCLOUDS parent group / document hierarchy (mirrors Bonsai's DRAWINGS
 # convention from IfcOpenShell PR #7093)
 # ---------------------------------------------------------------------------
+
 
 def test_parent_group_attributes(ifc):
     group = _get_parent_group(ifc)
@@ -310,22 +347,39 @@ def test_remove_documents_purges_empty_parent_relationship(ifc, element_with_doc
 
 
 # ---------------------------------------------------------------------------
-# IFC2X3 schema: CreationTime must not be set (attribute does not exist)
+# remove_documents — IFC2X3 branch (reference.ReferenceToDocument, the inverse
+# attribute IFC2X3 uses in place of IFC4's IfcDocumentReference.ReferencedDocument)
 # ---------------------------------------------------------------------------
 
-def test_ifc4_creation_time_accepts_iso_string():
-    # In IFC4, CreationTime is IfcDateTime (a string) — we set it freely.
-    ifc = ifcopenshell.file(schema="IFC4")
-    info = ifc.create_entity("IfcDocumentInformation", Identification="X", Name="Test")
-    info.CreationTime = "2026-01-01T10:00:00"
-    assert info.CreationTime == "2026-01-01T10:00:00"
+
+def test_remove_documents_ifc2x3_clears_association(ifc2x3, element_with_doc_ifc2x3):
+    _remove_documents(ifc2x3, element_with_doc_ifc2x3)
+    rels = [r for r in getattr(element_with_doc_ifc2x3, "HasAssociations", []) if r.is_a("IfcRelAssociatesDocument")]
+    assert len(rels) == 0
 
 
-def test_ifc2x3_uses_document_id_attribute():
-    # In IFC2X3, the primary identifier is DocumentId; IFC4 uses Identification.
-    # This schema difference is why our code checks get_schema() before
-    # setting CreationTime (which in IFC2X3 expects IfcDateAndTime, not a string).
-    ifc = ifcopenshell.file(schema="IFC2X3")
-    info = ifc.create_entity("IfcDocumentInformation", DocumentId="X", Name="Test")
-    assert hasattr(info, "DocumentId")
-    assert not hasattr(info, "Identification")
+def test_remove_documents_ifc2x3_removes_reference_from_model(ifc2x3, element_with_doc_ifc2x3):
+    _remove_documents(ifc2x3, element_with_doc_ifc2x3)
+    assert len(ifc2x3.by_type("IfcDocumentReference")) == 0
+
+
+def test_remove_documents_ifc2x3_removes_information_from_model(ifc2x3, element_with_doc_ifc2x3):
+    _remove_documents(ifc2x3, element_with_doc_ifc2x3)
+    # Only the POINTCLOUDS parent information remains (never removed, like
+    # Bonsai's DRAWINGS parent).
+    infos = ifc2x3.by_type("IfcDocumentInformation")
+    assert [i.Name for i in infos] == [const.PARENT_NAME]
+
+
+def test_remove_documents_ifc2x3_location_returns_empty(ifc2x3, element_with_doc_ifc2x3):
+    _remove_documents(ifc2x3, element_with_doc_ifc2x3)
+    assert _get_location(element_with_doc_ifc2x3) == ""
+
+
+def test_remove_documents_ifc2x3_does_not_affect_other_clouds(ifc2x3):
+    el_a = _add_annotation(ifc2x3, "ScanA")
+    el_b = _add_annotation(ifc2x3, "ScanB")
+    _add_document_reference(ifc2x3, el_a, "./clouds/a.ply")
+    _add_document_reference(ifc2x3, el_b, "./clouds/b.ply")
+    _remove_documents(ifc2x3, el_a)
+    assert _get_location(el_b) == "./clouds/b.ply"

@@ -1,12 +1,12 @@
 """Tests for rasterize.py — numpy-only rasterizer, no Blender needed."""
+
 import numpy as np
-
 from conftest import rasterize as R
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _eye():
     """Identity cam_to_world (camera at origin, looking down -Z)."""
@@ -16,11 +16,7 @@ def _eye():
 def _cloud(pts, rgb=None):
     """Build a (coords, colors) cloud tuple from a list of [x, y, z] points."""
     coords = np.array(pts, dtype=np.float32)
-    colors = (
-        np.array(rgb, dtype=np.float32)
-        if rgb is not None
-        else np.ones((len(coords), 4), dtype=np.float32)
-    )
+    colors = np.array(rgb, dtype=np.float32) if rgb is not None else np.ones((len(coords), 4), dtype=np.float32)
     return coords, colors
 
 
@@ -29,13 +25,13 @@ CAM_W, CAM_H, PS, DEPTH = 1.0, 1.0, 0.1, 0.1
 
 
 def _ras(clouds, mode="L", background="BLACK", **kw):
-    return R.rasterize(clouds, _eye(), CAM_W, CAM_H, DEPTH, PS,
-                       mode=mode, background=background, **kw)
+    return R.rasterize(clouds, _eye(), CAM_W, CAM_H, DEPTH, PS, mode=mode, background=background, **kw)
 
 
 # ---------------------------------------------------------------------------
 # Empty cloud
 # ---------------------------------------------------------------------------
+
 
 def test_empty_black():
     pixels, *_ = _ras([])
@@ -55,12 +51,13 @@ def test_empty_transparent_is_rgba():
 
 def test_empty_transparent_fully_clear():
     pixels, *_ = _ras([], background="TRANSPARENT")
-    assert pixels[:, :, 3].max() == 0   # alpha channel all zero
+    assert pixels[:, :, 3].max() == 0  # alpha channel all zero
 
 
 # ---------------------------------------------------------------------------
 # Single point
 # ---------------------------------------------------------------------------
+
 
 def test_point_in_front_hits_centre():
     # Point at world (0,0,-0.01): cam-space (0,0,-0.01) → centre pixel (5,5)
@@ -89,6 +86,7 @@ def test_point_outside_frustum_excluded():
 # Pixel-index accuracy
 # ---------------------------------------------------------------------------
 
+
 def test_corner_point_hits_corner_pixel():
     # Top-left corner of cam in cam space: (−0.45, +0.45, −0.01)
     # → col = floor((−0.45+0.5)/0.1) = floor(0.5) = 0
@@ -98,7 +96,7 @@ def test_corner_point_hits_corner_pixel():
 
 
 def test_density_increases_with_more_points():
-    one  = _ras([_cloud([[0.0, 0.0, -0.01]] * 1)])[0][5, 5]
+    one = _ras([_cloud([[0.0, 0.0, -0.01]] * 1)])[0][5, 5]
     many = _ras([_cloud([[0.0, 0.0, -0.01]] * 100)])[0][5, 5]
     assert many >= one
 
@@ -106,6 +104,7 @@ def test_density_increases_with_more_points():
 # ---------------------------------------------------------------------------
 # Transparent background
 # ---------------------------------------------------------------------------
+
 
 def test_transparent_hit_pixel_is_opaque():
     pixels, *_ = _ras([_cloud([[0.0, 0.0, -0.01]])], background="TRANSPARENT")
@@ -121,6 +120,7 @@ def test_transparent_empty_pixel_is_clear():
 # ---------------------------------------------------------------------------
 # RGB mode
 # ---------------------------------------------------------------------------
+
 
 def test_rgb_mode_shape():
     pixels, *_ = _ras([_cloud([[0.0, 0.0, -0.01]])], mode="RGB")
@@ -143,6 +143,7 @@ def test_rgb_transparent_is_rgba():
 # GeoTIFF origin
 # ---------------------------------------------------------------------------
 
+
 def test_geo_origin_identity_camera():
     # With identity cam, top-left world corner = (−half_w, +half_h) = (−0.5, +0.5)
     _, xo, yo = _ras([])
@@ -164,12 +165,13 @@ def test_geo_origin_translated_camera():
 # Image dimensions
 # ---------------------------------------------------------------------------
 
+
 def test_image_size_exact():
     pixels, *_ = R.rasterize([], _eye(), 2.0, 1.5, DEPTH, 0.1)
-    assert pixels.shape == (15, 20)   # H=ceil(1.5/0.1), W=ceil(2.0/0.1)
+    assert pixels.shape == (15, 20)  # H=ceil(1.5/0.1), W=ceil(2.0/0.1)
 
 
 def test_image_size_non_round():
     # cam_width not a multiple of pixel_size → ceil
     pixels, *_ = R.rasterize([], _eye(), 1.05, 1.05, DEPTH, 0.1)
-    assert pixels.shape == (11, 11)   # ceil(1.05/0.1) = 11
+    assert pixels.shape == (11, 11)  # ceil(1.05/0.1) = 11

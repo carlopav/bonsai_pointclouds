@@ -19,14 +19,14 @@
 import bpy
 from bpy.app.handlers import persistent
 
-from . import data, operator, prop, ui, geotiff, rasterize
+from . import data, operator, prop, ui
 from .viewer import PointCloudViewer
 
 bl_info = {
     "name": "Bonsai Point Clouds",
     "description": "Bridge between Bonsai (IFC) and Point Cloud Visualizer (PCV)",
     "author": "Carlo Pavan",
-    "version": (0, 7, 2),
+    "version": (0, 7, 3),
     "blender": (4, 0, 0),
     "location": "Properties > Scene > Drawings and Documents > Point Clouds",
     "warning": "Requires the Bonsai add-on (Point Cloud Visualizer optional)",

@@ -17,20 +17,22 @@
 # along with Bonsai Point Clouds.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import annotations
-import bpy
-import bonsai.tool as tool
-from bpy.types import PropertyGroup
-from bpy.props import (
-    StringProperty,
-    BoolProperty,
-    IntProperty,
-    FloatProperty,
-    EnumProperty,
-    CollectionProperty,
-)
-from typing import TYPE_CHECKING, Union
-from . import const
 
+from typing import TYPE_CHECKING
+
+import bonsai.tool as tool
+import bpy
+from bpy.props import (
+    BoolProperty,
+    CollectionProperty,
+    EnumProperty,
+    FloatProperty,
+    IntProperty,
+    StringProperty,
+)
+from bpy.types import PropertyGroup
+
+from . import const
 
 # ------------------------------------------------------------------
 # Per-cloud setting update callbacks
@@ -39,8 +41,9 @@ from . import const
 # ------------------------------------------------------------------
 
 
-def _update_point_size(self: "PointCloud", _context: bpy.types.Context) -> None:
+def _update_point_size(self: PointCloud, _context: bpy.types.Context) -> None:
     from .viewer import PointCloudViewer
+
     PointCloudViewer.tag_redraw()
     key = self.host_obj_name
     if key and not PointCloudViewer.exists(key):
@@ -56,11 +59,12 @@ def _update_point_size(self: "PointCloud", _context: bpy.types.Context) -> None:
                     pass
 
 
-def _update_opacity(self: "PointCloud", _context: bpy.types.Context) -> None:
+def _update_opacity(self: PointCloud, _context: bpy.types.Context) -> None:
     key = self.host_obj_name
     if not key:
         return
     from .viewer import PointCloudViewer
+
     if PointCloudViewer.exists(key):
         # Opacity is baked into vertex colors — needs a batch rebuild.
         PointCloudViewer.set_opacity(key, self.opacity)
@@ -78,8 +82,9 @@ def _update_opacity(self: "PointCloud", _context: bpy.types.Context) -> None:
                     pass
 
 
-def _update_draw_on_top(self: "PointCloud", _context: bpy.types.Context) -> None:
+def _update_draw_on_top(self: PointCloud, _context: bpy.types.Context) -> None:
     from .viewer import PointCloudViewer
+
     PointCloudViewer.tag_redraw()
     key = self.host_obj_name
     if key and not PointCloudViewer.exists(key):
@@ -94,7 +99,7 @@ def _update_draw_on_top(self: "PointCloud", _context: bpy.types.Context) -> None
                     pass
 
 
-def _try_set_pcv(obj: "bpy.types.Object", attr: str, value) -> None:
+def _try_set_pcv(obj: bpy.types.Object, attr: str, value) -> None:
     """Best-effort: push a value to PCV shader or data props."""
     props = getattr(obj, const.PCV_PROPERTY_GROUP, None)
     if props is None:
@@ -111,6 +116,7 @@ def _try_set_pcv(obj: "bpy.types.Object", attr: str, value) -> None:
 # ------------------------------------------------------------------
 # Property groups
 # ------------------------------------------------------------------
+
 
 class PointCloud(PropertyGroup):
     name: StringProperty(name="Name")
@@ -173,8 +179,8 @@ class BIMPointCloudExportProperties(PropertyGroup):
     color_mode: EnumProperty(
         name="Color Mode",
         items=[
-            ("L",   "Grayscale", "Density map — bright = more points"),
-            ("RGB", "RGB",       "Average colour of points per pixel"),
+            ("L", "Grayscale", "Density map — bright = more points"),
+            ("RGB", "RGB", "Average colour of points per pixel"),
         ],
         default="L",
     )
@@ -189,8 +195,8 @@ class BIMPointCloudExportProperties(PropertyGroup):
         name="Background",
         items=[
             ("TRANSPARENT", "Transparent", "Empty pixels are transparent (adds alpha channel)"),
-            ("WHITE",       "White",       "Empty pixels are white"),
-            ("BLACK",       "Black",       "Empty pixels are black"),
+            ("WHITE", "White", "Empty pixels are white"),
+            ("BLACK", "Black", "Empty pixels are black"),
         ],
         default="TRANSPARENT",
     )
@@ -221,5 +227,5 @@ class BIMPointCloudProperties(PropertyGroup):
         active_point_cloud_index: int
 
     @property
-    def active_point_cloud(self) -> Union[PointCloud, None]:
+    def active_point_cloud(self) -> PointCloud | None:
         return tool.Blender.get_active_uilist_element(self.point_clouds, self.active_point_cloud_index)

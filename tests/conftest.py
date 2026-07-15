@@ -4,26 +4,28 @@ Shared helpers for bonsai_pointclouds tests.
 geotiff.py and rasterize.py have zero Blender dependency, so we load them
 directly from the source tree without touching the package __init__.py.
 """
+
 import pathlib
 import struct
-import zlib
-
-import numpy as np
-import pytest
 
 # ---------------------------------------------------------------------------
 # Direct source imports (bypasses bpy/bonsai package machinery)
 # ---------------------------------------------------------------------------
 import sys
+
+import numpy as np
+import pytest
+
 _SRC = pathlib.Path(__file__).parent.parent / "src" / "bonsai_pointclouds"
 sys.path.insert(0, str(_SRC))
 
-import geotiff   # noqa: E402
-import rasterize # noqa: E402
+import geotiff  # noqa: E402
+import rasterize as rasterize  # noqa: E402  (re-exported for test_rasterize.py)
 
 # ---------------------------------------------------------------------------
 # TIFF parsing helpers
 # ---------------------------------------------------------------------------
+
 
 def parse_ifd(data: bytes) -> dict:
     """Return {tag: (type, count, value_or_offset)} for the first IFD."""
@@ -59,8 +61,8 @@ def read_shorts(data: bytes, tags: dict, tag: int) -> tuple:
 
 
 def strip_bytes(data: bytes, tags: dict) -> bytes:
-    off = inline_long(tags, 273)   # STRIP_OFFSETS
-    n   = inline_long(tags, 279)   # STRIP_BYTE_COUNTS
+    off = inline_long(tags, 273)  # STRIP_OFFSETS
+    n = inline_long(tags, 279)  # STRIP_BYTE_COUNTS
     return data[off : off + n]
 
 
@@ -73,11 +75,14 @@ def reverse_predictor(delta: np.ndarray) -> np.ndarray:
 # Pytest fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def tif(tmp_path):
     """Return a helper that writes pixels to a temp TIFF and returns its bytes."""
+
     def _write(pixels, x_origin=0.0, y_origin=0.0, pixel_size=0.005):
         p = tmp_path / "test.tif"
         geotiff.write(str(p), pixels, x_origin, y_origin, pixel_size)
         return p.read_bytes()
+
     return _write

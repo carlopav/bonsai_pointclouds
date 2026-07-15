@@ -17,10 +17,12 @@
 # along with Bonsai Point Clouds.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import ifcopenshell
+
     from .tool import PointCloud
 
 
@@ -53,7 +55,7 @@ def remove_point_cloud(
     point_cloud.import_point_clouds()
 
 
-def load(point_cloud: type[PointCloud], element: ifcopenshell.entity_instance) -> "str | None":
+def load(point_cloud: type[PointCloud], element: ifcopenshell.entity_instance) -> str | None:
     error = point_cloud.load(element)
     point_cloud.import_point_clouds()
     return error
@@ -95,7 +97,7 @@ def toggle_clipping(
 def align_clip_to_view(
     point_cloud: type[PointCloud],
     element: ifcopenshell.entity_instance,
-) -> "str | None":
+) -> str | None:
     error = point_cloud.align_clip_to_view(element)
     point_cloud.sync_item(element)
     return error
@@ -108,5 +110,5 @@ def export_geotiff(
     resolution_mm: float,
     mode: str,
     background: str,
-) -> "str | None":
+) -> tuple[str | None, str | None]:
     return point_cloud.export_geotiff(filepath, depth, resolution_mm, mode, background)

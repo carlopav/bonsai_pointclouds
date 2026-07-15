@@ -33,10 +33,12 @@ Only reads PLY; LAS/E57 still require PCV.
 """
 
 from __future__ import annotations
-import numpy as np
+
 import bpy
 import gpu
+import numpy as np
 from gpu_extras.batch import batch_for_shader
+
 from . import const
 
 # ------------------------------------------------------------------
@@ -62,15 +64,19 @@ _CLIP_GLSL = """
 
 # --- Normal shader (early depth test active, fastest path) ---
 
-_VERT_GLSL = """
+_VERT_GLSL = (
+    """
 void main()
 {
-""" + _CLIP_GLSL + """
+"""
+    + _CLIP_GLSL
+    + """
     gl_Position = u_mvp * vec4(pos, 1.0);
     gl_PointSize = u_point_size;
     v_color = color;
 }
 """
+)
 
 _FRAG_GLSL = """
 void main()
@@ -88,11 +94,14 @@ void main()
 # over farther points.  Writing gl_FragDepth disables early depth culling, so
 # this variant is kept separate to avoid penalising normal draws.
 
-_VERT_GLSL_TOP = """
+_VERT_GLSL_TOP = (
+    """
 void main()
 {
     v_depth = 0.0;
-""" + _CLIP_GLSL + """
+"""
+    + _CLIP_GLSL
+    + """
     gl_Position = u_mvp * vec4(pos, 1.0);
     gl_PointSize = u_point_size;
     v_color = color;
@@ -102,6 +111,7 @@ void main()
     gl_Position.z = -gl_Position.w;                /* → near plane */
 }
 """
+)
 
 _FRAG_GLSL_TOP = """
 void main()
@@ -116,21 +126,21 @@ void main()
 
 def _build_shader(vert: str, frag: str, name: str, extra_push_constants: list = None):
     iface = gpu.types.GPUStageInterfaceInfo(name + "_Iface")
-    iface.smooth('VEC4', 'v_color')
-    iface.smooth('FLOAT', 'v_discard')
+    iface.smooth("VEC4", "v_color")
+    iface.smooth("FLOAT", "v_discard")
     if extra_push_constants:
         # extra varyings for the draw_on_top variant
-        iface.smooth('FLOAT', 'v_depth')
+        iface.smooth("FLOAT", "v_depth")
 
     info = gpu.types.GPUShaderCreateInfo()
-    info.push_constant('MAT4',  'u_mvp')
-    info.push_constant('MAT4',  'u_local_to_clip')
-    info.push_constant('FLOAT', 'u_point_size')
-    info.push_constant('INT',   'u_clip_enabled')
-    info.vertex_in(0, 'VEC3', 'pos')
-    info.vertex_in(1, 'VEC4', 'color')
+    info.push_constant("MAT4", "u_mvp")
+    info.push_constant("MAT4", "u_local_to_clip")
+    info.push_constant("FLOAT", "u_point_size")
+    info.push_constant("INT", "u_clip_enabled")
+    info.vertex_in(0, "VEC3", "pos")
+    info.vertex_in(1, "VEC4", "color")
     info.vertex_out(iface)
-    info.fragment_out(0, 'VEC4', 'fragColor')
+    info.fragment_out(0, "VEC4", "fragColor")
     info.vertex_source(vert)
     info.fragment_source(frag)
 
@@ -152,7 +162,7 @@ def _mat4_flat(m) -> list:
     return [m[r][c] for c in range(4) for r in range(4)]
 
 
-_IDENTITY_FLAT = [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+_IDENTITY_FLAT = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 
 
 class PointCloudViewer:
@@ -193,13 +203,9 @@ class PointCloudViewer:
     @classmethod
     def register(cls):
         if cls._draw_handle is None:
-            cls._draw_handle = bpy.types.SpaceView3D.draw_handler_add(
-                cls._draw, (), "WINDOW", "POST_VIEW"
-            )
+            cls._draw_handle = bpy.types.SpaceView3D.draw_handler_add(cls._draw, (), "WINDOW", "POST_VIEW")
         if cls._depsgraph_handle is None:
-            cls._depsgraph_handle = bpy.app.handlers.depsgraph_update_post.append(
-                _depsgraph_update
-            )
+            cls._depsgraph_handle = bpy.app.handlers.depsgraph_update_post.append(_depsgraph_update)
 
     @classmethod
     def unregister(cls):
@@ -330,7 +336,7 @@ class PointCloudViewer:
         proj_mat = gpu.matrix.get_projection_matrix()
 
         shader_normal = cls._get_shader()
-        shader_top    = cls._get_shader_top()
+        shader_top = cls._get_shader_top()
         gpu.state.depth_test_set("LESS_EQUAL")
 
         for key, entry in list(cls.clouds.items()):
@@ -351,9 +357,9 @@ class PointCloudViewer:
                     if prop_item is not None:
                         prop_item.host_obj_name = key  # heal for next frame
 
-            point_size   = prop_item.point_size   if prop_item else const.VIEWER_POINT_SIZE
-            draw_on_top  = prop_item.draw_on_top  if prop_item else False
-            opacity      = entry.get("opacity", 1.0)
+            point_size = prop_item.point_size if prop_item else const.VIEWER_POINT_SIZE
+            draw_on_top = prop_item.draw_on_top if prop_item else False
+            opacity = entry.get("opacity", 1.0)
 
             shader = shader_top if draw_on_top else shader_normal
             shader.bind()
@@ -383,6 +389,7 @@ class PointCloudViewer:
 # Depsgraph handler — tag redraw when a clip box moves
 # ------------------------------------------------------------------
 
+
 def _depsgraph_update(_, depsgraph):
     """Clip-box movement triggers a redraw; the vertex shader re-evaluates each frame."""
     if not PointCloudViewer.clouds:
@@ -401,14 +408,22 @@ def _depsgraph_update(_, depsgraph):
 # ------------------------------------------------------------------
 
 _PLY_DTYPES = {
-    "char": "i1", "int8": "i1",
-    "uchar": "u1", "uint8": "u1",
-    "short": "i2", "int16": "i2",
-    "ushort": "u2", "uint16": "u2",
-    "int": "i4", "int32": "i4",
-    "uint": "u4", "uint32": "u4",
-    "float": "f4", "float32": "f4",
-    "double": "f8", "float64": "f8",
+    "char": "i1",
+    "int8": "i1",
+    "uchar": "u1",
+    "uint8": "u1",
+    "short": "i2",
+    "int16": "i2",
+    "ushort": "u2",
+    "uint16": "u2",
+    "int": "i4",
+    "int32": "i4",
+    "uint": "u4",
+    "uint32": "u4",
+    "float": "f4",
+    "float32": "f4",
+    "double": "f8",
+    "float64": "f8",
 }
 
 

@@ -16,12 +16,14 @@
 # You should have received a copy of the GNU General Public License
 # along with Bonsai Point Clouds.  If not, see <http://www.gnu.org/licenses/>.
 
-import bpy
 import bonsai.tool as tool
+import bpy
 from bpy.types import Panel, UIList
-from .tool import PointCloud
+
 from .data import PointCloudsData
-from .prop import BIMPointCloudProperties, PointCloud as PointCloudItem
+from .prop import BIMPointCloudProperties
+from .prop import PointCloud as PointCloudItem
+from .tool import PointCloud
 
 
 class BIM_PT_tab_point_clouds(Panel):
@@ -62,7 +64,10 @@ class BIM_PT_point_clouds(Panel):
         self.props = PointCloud.get_pointcloud_props()
 
         row = self.layout.row(align=True)
-        row.label(text="{} Point Clouds found".format(len(PointCloudsData.data["point_clouds"])), icon="OUTLINER_OB_POINTCLOUD")
+        row.label(
+            text="{} Point Clouds found".format(len(PointCloudsData.data["point_clouds"])),
+            icon="OUTLINER_OB_POINTCLOUD",
+        )
 
         if self.props.is_editing:
             row.operator("bonsai_pointclouds.add_point_cloud", text="", icon="ADD")

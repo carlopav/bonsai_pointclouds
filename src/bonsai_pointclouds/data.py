@@ -17,7 +17,9 @@
 # along with Bonsai Point Clouds.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
+
 import bonsai.tool as tool
+
 from . import const
 
 

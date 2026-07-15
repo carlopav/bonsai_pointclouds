@@ -17,24 +17,29 @@
 # along with Bonsai Point Clouds.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import annotations
-import os
+
 import importlib
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import bonsai.tool as tool
 import bpy
 import ifcopenshell
 import ifcopenshell.util.placement
 import ifcopenshell.util.unit
-import bonsai.tool as tool
-from datetime import datetime
-from mathutils import Matrix
-from pathlib import Path
-from typing import Optional
-from . import const
-from .data import PointCloudsData
 import numpy as np
-from .viewer import PointCloudViewer, read_ply
-from . import rasterize as _rasterize
-from . import geotiff as _geotiff
+from mathutils import Matrix
 
+from . import const
+from . import geotiff as _geotiff
+from . import rasterize as _rasterize
+from .data import PointCloudsData
+from .viewer import PointCloudViewer, read_ply
+
+if TYPE_CHECKING:
+    from .prop import BIMPointCloudProperties
 
 # A custom Blender object property links a viewport object back to its IFC element.
 LINK_PROP = "bonsai_pointcloud_id"
@@ -44,7 +49,7 @@ class PointCloud:
     # Properties -------------------------------------------------------------
 
     @classmethod
-    def get_pointcloud_props(cls) -> "BIMPointCloudProperties":
+    def get_pointcloud_props(cls) -> BIMPointCloudProperties:
         return bpy.context.scene.BIMPointCloudProperties
 
     @classmethod
@@ -162,7 +167,7 @@ class PointCloud:
         return information
 
     @classmethod
-    def get_default_container(cls) -> Optional[ifcopenshell.entity_instance]:
+    def get_default_container(cls) -> ifcopenshell.entity_instance | None:
         """Return a spatial element to contain new point clouds (prefer IfcSite)."""
         ifc = tool.Ifc.get()
         for ifc_class in ("IfcSite", "IfcBuilding", "IfcBuildingStorey", "IfcSpace"):
@@ -216,7 +221,7 @@ class PointCloud:
     # Blender / viewport objects --------------------------------------------
 
     @classmethod
-    def get_host_object(cls, element: ifcopenshell.entity_instance) -> Optional[bpy.types.Object]:
+    def get_host_object(cls, element: ifcopenshell.entity_instance) -> bpy.types.Object | None:
         # Fast path: custom prop set by ensure_host (survives rename).
         for obj in bpy.context.scene.objects:
             if obj.get(LINK_PROP) == element.id() and not obj.get("is_clipbox"):
@@ -230,7 +235,7 @@ class PointCloud:
         return None
 
     @classmethod
-    def get_clipbox_object(cls, element: ifcopenshell.entity_instance) -> Optional[bpy.types.Object]:
+    def get_clipbox_object(cls, element: ifcopenshell.entity_instance) -> bpy.types.Object | None:
         for obj in bpy.context.scene.objects:
             if obj.get(LINK_PROP) == element.id() and obj.get("is_clipbox"):
                 return obj
@@ -292,8 +297,7 @@ class PointCloud:
         if obj is None:
             return False
         if PointCloudViewer.exists(obj.name):
-            entry = PointCloudViewer.clouds.get(obj.name)
-            return bool(entry and entry.get("clip_enabled", False))
+            return PointCloudViewer.get_clip_enabled(obj.name)
         shader = cls.get_pcv_shader(obj)
         if shader is None:
             return False
@@ -322,7 +326,7 @@ class PointCloud:
         return str((Path(cls.get_ifc_directory()) / location).resolve())
 
     @classmethod
-    def get_filetype(cls, filepath: str) -> Optional[str]:
+    def get_filetype(cls, filepath: str) -> str | None:
         return const.PCV_FORMAT_MAPPING.get(Path(filepath).suffix.lower())
 
     # PCV --------------------------------------------------------------------
@@ -375,7 +379,7 @@ class PointCloud:
         return obj
 
     @classmethod
-    def load(cls, element: ifcopenshell.entity_instance) -> Optional[str]:
+    def load(cls, element: ifcopenshell.entity_instance) -> str | None:
         """Load the point cloud into the viewport, preferring PCV over our viewer.
 
         Returns None on success, or an error message describing what failed.
@@ -418,7 +422,7 @@ class PointCloud:
             pcv.mechanist.PCVMechanist.tag_redraw()
 
     @classmethod
-    def _load_with_pcv(cls, pcv, obj, filepath: str, filetype: str) -> Optional[str]:
+    def _load_with_pcv(cls, pcv, obj, filepath: str, filetype: str) -> str | None:
         pcv_props = getattr(obj, const.PCV_PROPERTY_GROUP)
         pcv_props.data.filepath = bpy.path.abspath(filepath)
         pcv_props.data.filetype = filetype
@@ -458,7 +462,7 @@ class PointCloud:
         return None
 
     @classmethod
-    def _load_with_viewer(cls, obj, filepath: str, filetype: str) -> Optional[str]:
+    def _load_with_viewer(cls, obj, filepath: str, filetype: str) -> str | None:
         if filetype != "PLY":
             return f"{filetype} files require the Point Cloud Visualizer add-on"
         try:
@@ -526,7 +530,9 @@ class PointCloud:
         return cls.set_clipping(element, True)
 
     @classmethod
-    def align_clip_to_view(cls, element: ifcopenshell.entity_instance, depth: float = const.CLIPBOX_VIEW_DEPTH) -> Optional[str]:
+    def align_clip_to_view(
+        cls, element: ifcopenshell.entity_instance, depth: float = const.CLIPBOX_VIEW_DEPTH
+    ) -> str | None:
         """Align the clip box to the active orthographic drawing camera.
 
         The box takes the camera's view extent (width x height) and a shallow
@@ -553,9 +559,7 @@ class PointCloud:
             cube["pcv_view_aligned"] = True
         center_z = -(cam.data.clip_start + depth / 2.0)
         cube.matrix_world = (
-            cam.matrix_world
-            @ Matrix.Translation((0.0, 0.0, center_z))
-            @ Matrix.Diagonal((width, height, depth, 1.0))
+            cam.matrix_world @ Matrix.Translation((0.0, 0.0, center_z)) @ Matrix.Diagonal((width, height, depth, 1.0))
         )
         if not cls.set_clipping(element, True):
             return "Clipping requires the Point Cloud Visualizer add-on"
@@ -627,21 +631,23 @@ class PointCloud:
     # Export ---------------------------------------------------------------
 
     @classmethod
-    def export_geotiff(cls, filepath: str, depth: float, resolution_mm: float, mode: str, background: str = "BLACK") -> Optional[str]:
+    def export_geotiff(
+        cls, filepath: str, depth: float, resolution_mm: float, mode: str, background: str = "BLACK"
+    ) -> tuple[str | None, str | None]:
         """Rasterize all visible+loaded clouds onto the active ortho camera plane.
 
-        Returns None on success, or an error string.
+        Returns ``(abs_path, None)`` on success, or ``(None, error)`` on failure.
         """
         cam = bpy.context.scene.camera
         if cam is None or cam.type != "CAMERA":
-            return "No active camera in the scene"
+            return None, "No active camera in the scene"
         if cam.data.type != "ORTHO":
-            return "Active camera must be orthographic"
+            return None, "Active camera must be orthographic"
 
         # Camera extents
-        scene  = bpy.context.scene
+        scene = bpy.context.scene
         rx, ry = scene.render.resolution_x, scene.render.resolution_y
-        ortho  = cam.data.ortho_scale
+        ortho = cam.data.ortho_scale
         if rx >= ry:
             cam_w, cam_h = ortho, ortho * (ry / rx)
         else:
@@ -650,7 +656,7 @@ class PointCloud:
         # Collect points from all visible + loaded clouds
         clouds = cls._collect_visible_clouds()
         if not clouds:
-            return "No visible loaded point clouds found"
+            return None, "No visible loaded point clouds found"
 
         pixel_size = resolution_mm / 1000.0  # mm → metres
 
@@ -658,26 +664,25 @@ class PointCloud:
         cam_mat = np.array(cam.matrix_world, dtype=np.float64)
 
         pixels, x_origin, y_origin = _rasterize.rasterize(
-            clouds       = clouds,
-            cam_to_world = cam_mat,
-            cam_width    = cam_w,
-            cam_height   = cam_h,
-            depth        = depth,
-            pixel_size   = pixel_size,
-            mode         = mode,
-            background   = background,
+            clouds=clouds,
+            cam_to_world=cam_mat,
+            cam_width=cam_w,
+            cam_height=cam_h,
+            depth=depth,
+            pixel_size=pixel_size,
+            mode=mode,
+            background=background,
         )
 
         abs_path = cls.get_absolute_location(filepath[2:] if filepath.startswith("//") else filepath)
         _geotiff.write(
-            filepath   = abs_path,
-            pixels     = pixels,
-            x_origin   = x_origin,
-            y_origin   = y_origin,
-            pixel_size = pixel_size,
-            mode       = mode,
+            filepath=abs_path,
+            pixels=pixels,
+            x_origin=x_origin,
+            y_origin=y_origin,
+            pixel_size=pixel_size,
         )
-        return None
+        return abs_path, None
 
     @classmethod
     def _collect_visible_clouds(cls) -> list:
@@ -694,7 +699,7 @@ class PointCloud:
             if obj is None:
                 continue
             # coords are stored in object local space — bring to world space
-            mat  = np.array(obj.matrix_world, dtype=np.float64)
+            mat = np.array(obj.matrix_world, dtype=np.float64)
             ones = np.ones((len(coords), 1), dtype=np.float64)
             pts_h = np.concatenate([coords.astype(np.float64), ones], axis=1)
             world_coords = (mat @ pts_h.T).T[:, :3].astype(np.float32)

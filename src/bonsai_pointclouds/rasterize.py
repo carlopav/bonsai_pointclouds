@@ -44,7 +44,9 @@ RGB output represents the average colour of all points that fall into each pixel
 """
 
 from __future__ import annotations
+
 import math
+
 import numpy as np
 
 
@@ -91,11 +93,11 @@ def rasterize(
     y_origin
         World Y coordinate of the same corner.
     """
-    W = max(1, math.ceil(cam_width  / pixel_size))
+    W = max(1, math.ceil(cam_width / pixel_size))
     H = max(1, math.ceil(cam_height / pixel_size))
 
     world_to_cam = np.linalg.inv(cam_to_world.astype(np.float64))
-    half_w = cam_width  / 2.0
+    half_w = cam_width / 2.0
     half_h = cam_height / 2.0
 
     # Accumulators
@@ -114,9 +116,9 @@ def rasterize(
         coords = np.asarray(coords, dtype=np.float64)
 
         # Transform to camera local space (homogeneous multiply)
-        ones   = np.ones((len(coords), 1), dtype=np.float64)
-        pts_h  = np.concatenate([coords, ones], axis=1)       # (N, 4)
-        pts_cam = (world_to_cam @ pts_h.T).T                  # (N, 4)
+        ones = np.ones((len(coords), 1), dtype=np.float64)
+        pts_h = np.concatenate([coords, ones], axis=1)  # (N, 4)
+        pts_cam = (world_to_cam @ pts_h.T).T  # (N, 4)
 
         x_cam = pts_cam[:, 0]
         y_cam = pts_cam[:, 1]
@@ -144,7 +146,7 @@ def rasterize(
         col = np.clip(col, 0, W - 1)
         row = np.clip(row, 0, H - 1)
 
-        flat = row * W + col   # (M,) flat pixel index
+        flat = row * W + col  # (M,) flat pixel index
 
         # Accumulate
         np.add.at(acc_n, flat, 1)
@@ -155,7 +157,7 @@ def rasterize(
             np.add.at(acc_b, flat, rgb[:, 2])
 
     # --- Build output image --------------------------------------------------
-    hit      = acc_n.reshape(H, W) > 0
+    hit = acc_n.reshape(H, W) > 0
     bg_value = 255 if background == "WHITE" else 0
     use_alpha = background == "TRANSPARENT"
 
@@ -168,14 +170,14 @@ def rasterize(
         rgb = (img.reshape(H, W, 3) * 255).clip(0, 255).astype(np.uint8)
         if use_alpha:
             alpha = (hit * 255).astype(np.uint8)[:, :, np.newaxis]
-            pixels = np.concatenate([rgb, alpha], axis=2)   # (H, W, 4)
+            pixels = np.concatenate([rgb, alpha], axis=2)  # (H, W, 4)
         else:
             pixels = rgb
     else:
         density = acc_n.reshape(H, W).astype(np.float64)
         if density.max() > 0:
             log_d = np.log1p(density)
-            grey  = (log_d / log_d.max() * 255).astype(np.uint8)
+            grey = (log_d / log_d.max() * 255).astype(np.uint8)
         else:
             grey = np.zeros((H, W), dtype=np.uint8)
         if background == "WHITE":
@@ -184,7 +186,7 @@ def rasterize(
             alpha = (hit * 255).astype(np.uint8)
             # Expand to RGBA (gray triplicated) — LA (gray+alpha) has poor support
             # in many TIFF readers (BricsCAD, Krita); RGBA is universally safe.
-            rgb   = np.stack([grey, grey, grey], axis=2)             # (H, W, 3)
+            rgb = np.stack([grey, grey, grey], axis=2)  # (H, W, 3)
             pixels = np.concatenate([rgb, alpha[:, :, np.newaxis]], axis=2)  # (H, W, 4)
         else:
             pixels = grey

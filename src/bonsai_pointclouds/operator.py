@@ -17,8 +17,10 @@
 # along with Bonsai Point Clouds.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
-import bpy
+
 import bonsai.tool as tool
+import bpy
+
 from . import core
 from .tool import PointCloud
 
@@ -172,18 +174,17 @@ class ExportPointCloudGeoTIFF(bpy.types.Operator):
         if not filepath:
             self.report({"ERROR"}, "Set an output file path first")
             return {"CANCELLED"}
-        error = core.export_geotiff(
+        abs_path, error = core.export_geotiff(
             PointCloud,
-            filepath      = filepath,
-            depth         = exp.depth,
-            resolution_mm = exp.resolution_mm,
-            mode          = exp.color_mode,
-            background    = exp.background,
+            filepath=filepath,
+            depth=exp.depth,
+            resolution_mm=exp.resolution_mm,
+            mode=exp.color_mode,
+            background=exp.background,
         )
         if error:
             self.report({"ERROR"}, error)
             return {"CANCELLED"}
-        abs_path = PointCloud.get_absolute_location(filepath[2:] if filepath.startswith("//") else filepath)
         self.report({"INFO"}, f"GeoTIFF saved: {abs_path}")
         return {"FINISHED"}
 
